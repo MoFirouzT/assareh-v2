@@ -7,7 +7,7 @@ No modeling, no features, no targets yet.
 
 ---
 
-## A.1 — Repo skeleton and tooling (2–3 hours)
+## A.1 — Repo skeleton and tooling (1 hour)
 
 **What to build:**
 
