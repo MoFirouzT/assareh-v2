@@ -407,6 +407,8 @@ def check_integrity(df: pl.DataFrame, timeframe: str) -> IntegrityReport:
   minutes in 2017–2018). Don't filter.
 - **OHLC-equal bars** (O=H=L=C) — SOFT. Count and record. Real at low
   volume; useful to know the count.
+- **Negative volume** — HARD FAILURE. Physically impossible; indicates
+  source corruption or a parse error.
 - **NaN in volume** — SOFT. Count by column.
 - **UTC timezone** — sanity-check that `open_time` is timezone-aware UTC;
   HARD FAILURE if not (loader should have caught this, this is a backstop).

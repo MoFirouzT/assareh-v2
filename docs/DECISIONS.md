@@ -23,4 +23,24 @@ finds constraints that require different tooling.
 
 ---
 
+A.4: negative volume is a hard integrity failure
+
+Negative volume is physically impossible. It indicates source corruption or
+a parse error — not a data quirk like a zero-volume bar (which is real at
+low-activity periods). Treating it as a hard failure makes the pipeline fail
+loudly rather than silently propagate bad data into features.
+
+---
+
+A.4: loader casts to OHLCV_SCHEMA rather than asserting exact match
+
+The downloader writes Parquet via pandas, which may round-trip timestamps at
+a different precision (ms vs us). A strict schema comparison would reject
+valid data that differs only in precision. The loader now reads the Parquet,
+checks for missing columns (hard error), then casts every column to the
+canonical OHLCV_SCHEMA type. This guarantees the output schema is always
+correct without rejecting recoverable mismatches.
+
+---
+
 (Additional decisions will be appended here alongside the implementing commits.)
