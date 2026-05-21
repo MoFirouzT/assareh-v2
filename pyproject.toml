@@ -1,0 +1,37 @@
+[project]
+name = "assareh"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "polars>=1.20,<2",
+    "pandas>=2.2,<3",
+    "numpy>=1.26,<3",
+    "pydantic>=2.7,<3",
+    "pydantic-settings>=2.3,<3",
+    "mlflow>=2.15,<3",
+    "scikit-learn>=1.5,<2",
+    "torch>=2.4,<3",
+    "requests>=2.32,<3",
+    "ccxt>=4.4,<5",
+    "tqdm>=4.66,<5",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-cov",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "ipykernel",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
