@@ -1,4 +1,4 @@
-Do not open a Markdown preview, Simple Browser, or any preview tab.
+# Assareh project conventions
 
 ## Hard rules — never violate
 - Never random-split time-series data. Always walk-forward.
@@ -39,3 +39,5 @@ Do not open a Markdown preview, Simple Browser, or any preview tab.
 
 ## Out of scope (Layer 1)
 - Other assets, hyperparameter optimization, deployment, exotic architectures.
+
+Do not open a Markdown preview, Simple Browser, or any preview tab.

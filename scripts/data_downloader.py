@@ -17,7 +17,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from tqdm import tqdm
 
-from src.assareh.config import Settings
+from assareh.config import Settings
 
 
 logger = logging.getLogger("assareh.fetch")
@@ -160,7 +160,7 @@ class BinanceDownloader:
             # fallback: try ms conversion but catch OutOfBounds and report sample
             try:
                 return pd.to_datetime(num.astype('Int64'), unit='ms', utc=True)
-            except Exception as exc:
+            except Exception:
                 sample = list(num.head(10).values)
                 logger.exception("Failed to parse timestamps for %s; sample=%s", col_name, sample)
                 raise
@@ -366,7 +366,7 @@ class BinanceDownloader:
             if len(all_rows) >= limit or len(ohlcv) < 1000:
                 break
             current_since = ohlcv[-1][0] + 1
-            if current_since > datetime.now().timestamp() * 1000:
+            if current_since > datetime.now(timezone.utc).timestamp() * 1000:
                 break
         if len(all_rows) > limit:
             all_rows = all_rows[:limit]

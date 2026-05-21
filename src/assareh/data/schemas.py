@@ -2,11 +2,9 @@
 
 from datetime import datetime
 from pydantic import BaseModel
-from typing import Any
 import polars as pl
-from polars._typing import PolarsDataType
 
-OHLCV_SCHEMA: dict[str, PolarsDataType] = {
+OHLCV_SCHEMA: dict[str, type[pl.DataType] | pl.DataType] = {
     "open_time": pl.Datetime("us", time_zone="UTC"),
     "open": pl.Float64,
     "high": pl.Float64,

@@ -93,6 +93,13 @@ dev = [
     "ipykernel",
 ]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/assareh"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
@@ -157,7 +164,7 @@ import polars as pl
 from datetime import datetime
 from pydantic import BaseModel
 
-OHLCV_SCHEMA: dict[str, pl.DataType] = {
+OHLCV_SCHEMA: dict[str, type[pl.DataType] | pl.DataType] = {
     "open_time":              pl.Datetime("us", time_zone="UTC"),
     "open":                   pl.Float64,
     "high":                   pl.Float64,
@@ -300,9 +307,15 @@ Vision data on the overlap before appending. Adapt rather than rewrite.
    downloaded bytes matches; reject mismatches with a hard error. Append
    verified hashes to `data/raw/checksums.jsonl` for audit.
 
-5. **Pin time unit to `ms`.**
-   Remove the 13/16-char auto-detection branching in `_parse_csv`. Spot
-   klines on Vision are milliseconds, always.
+5. **Keep timestamp auto-detection; do not pin to `ms`.**
+   Binance has historically used both millisecond (13-digit) and microsecond
+   (16-digit) timestamps across different data sources and time periods.
+   Pinning to `ms` would silently corrupt any `us`-encoded rows. Instead,
+   detect by numeric range in `_parse_csv`: ms values fall in
+   `[1_262_304_000_000, 32_503_680_000_000]`, us values are 1000× larger,
+   seconds values are 1000× smaller — the ranges are non-overlapping so
+   detection is unambiguous. Apply the check column-wide (`.all()`) since
+   Vision CSVs use a single consistent encoding per file.
 
 6. **Logging and config.**
    - Replace every `print(...)` with stdlib `logging` (logger name
