@@ -91,6 +91,14 @@ This guarantees the output schema is always correct without rejecting recoverabl
 - **Recorded alternative.** Drop no-touch samples, or label them `−1` for a
   strictly binary target — would change the base rate; not used, but noted as a
   sensitivity to revisit if the `0` class dominates.
+- **Added detail (2026-05-25).** A *third* no-touch option exists beyond the two
+  recorded alternatives: de Prado's `getBins` relabels vertical-barrier touches
+  by the **sign of the return at the horizon**, eliminating the `0` class.
+  Explicitly **rejected** — it manufactures ±1 labels from non-events (a flat
+  drift closing +0.1% becomes a "win"), exactly the optimistic labeling this
+  project avoids. The open head-architecture question (three-class vs. binary) is
+  resolved by **D-014 (meta-labeling)**: the primary model predicts side and a
+  binary meta-model absorbs the `0` class as "don't act."
 
 ## D-004 — Embargo and purging
 
@@ -108,6 +116,19 @@ This guarantees the output schema is always correct without rejecting recoverabl
   remedy (LdP ch. 7).
 - **Recorded alternative.** v1's feature-only overlap (embargo = 0). Retained
   solely as the probe configuration; not a co-equal default.
+- **Added detail (2026-05-25).** Purge and embargo remove **two distinct leaks**.
+  *Purging* removes training labels whose outcome **window** overlaps the test
+  span (an outcome leak). *Embargo* removes a post-test buffer to kill
+  **serial-correlation** leakage that purging cannot see — a label whose window
+  ends *before* the test block (no overlap, so purge keeps it) can still share
+  the boundary's regime/volatility state. Different mechanisms, different fixes;
+  any leak surviving a correct purge is embargo's department. Implementation
+  (`getTrainTimes`) must handle three overlap cases — train starts within test,
+  train ends within test, train envelops test — with a property-based test
+  asserting no surviving training window intersects any test span. The embargo
+  length is pinned to the **horizon** (511), deliberately stronger than LdP's
+  "~1% of observations" heuristic, because the horizon is the true dependence
+  timescale here.
 
 ## D-005 — Sample-uniqueness weighting
 
@@ -125,6 +146,18 @@ This guarantees the output schema is always correct without rejecting recoverabl
   cleanly; v1's class weights are kept, not discarded.
 - **Recorded alternative.** Class weights only (v1) — kept as the inner factor;
   uniqueness layered on top.
+- **Added detail (2026-05-25).** Definitions to lock. Concurrency
+  `c_t = Σ_i 1[t_{i,0} ≤ t ≤ t_{i,1}]`. Average uniqueness
+  `ū_i = (1/|window_i|) · Σ_{t∈window_i} (1/c_t)` — sanity test: `ū_i = 1` when
+  all `c_t = 1`; note `|window_i|` is the bar count, **not** a concurrency value.
+  Effective sample size via Kish: `N_eff = (Σ w_i)² / Σ w_i²`, used as the
+  denominator in every interval (`SE ≈ σ/√N_eff`); expect `N_eff` one-to-two
+  orders of magnitude below the raw row count given 511-bar overlap. After
+  `class × uniqueness`, **renormalize** weights to sum to `N` (or `N_eff`) so the
+  effective learning rate is unchanged — assert in a test. Concurrency and
+  uniqueness must be computed on **training-fold labels only** (windows inside
+  the fold); computing across the full series leaks test-period overlap structure
+  into training weights.
 
 ## D-006 — Barrier-touch resolution source
 
@@ -142,6 +175,14 @@ This guarantees the output schema is always correct without rejecting recoverabl
   interesting honest findings.
 - **Recorded alternative.** 15m-optimistic resolution (v1) — kept as the
   comparison arm, reported, not trusted.
+- **Added detail (2026-05-25).** 1m resolution **reduces but does not eliminate**
+  same-bar ambiguity: the identical tie-break problem recurs inside any single
+  1m bar that straddles both barriers. The residual is ~an order of magnitude
+  rarer than at 15m, so the residual bias is small — but log the **1m** same-bar
+  ambiguity rate too, so the residual is bounded by measurement rather than
+  assumed zero. Formally the label needs `min(τ_u, τ_ℓ)`, which is *unidentified*
+  from any bar's OHLC when both barriers fall inside it; finer bars shrink, but
+  never fully close, that set of unidentified cases.
 
 ## D-007 — Breakeven reference (38.5%, not 50%)
 
@@ -157,6 +198,14 @@ This guarantees the output schema is always correct without rejecting recoverabl
   precision is already an edge here. Stating the true bar prevents misreading
   results.
 - **Recorded alternative.** Implicit 50% (v1) — incorrect; superseded.
+- **Added detail (2026-05-25).** The 38.5% bar is the general payoff identity
+  `breakeven = ℓ / (u + ℓ)` and is **pre-cost**. Net of fees + slippage the
+  *effective* breakeven rises **above** 38.5%, because each trade must also pay
+  its costs. The honest comparison is therefore net-precision against the
+  cost-adjusted breakeven, not net-precision against 38.5%. Compute the
+  cost-adjusted breakeven once the D-011 cost model is fixed and record it
+  alongside the pre-cost reference; the success threshold (D-008) judges against
+  the cost-adjusted number.
 
 ## D-008 — Success-threshold pre-registration
 
@@ -172,6 +221,19 @@ This guarantees the output schema is always correct without rejecting recoverabl
 - **Rationale.** Pre-registration is the operational form of "honesty over
   results"; it removes the Phase-E temptation to retrofit the bar.
 - **Recorded alternative.** Post-hoc judgement (v1) — rejected.
+- **Added detail (2026-05-25) — correction to the Sharpe clause.**
+  "**Deflated Sharpe > 0**" is **not a meaningful bar**: the DSR is a
+  *probability* in `[0, 1]` and is almost always > 0. Replace with
+  **DSR > 0.95** (or the chosen confidence). The DSR formula additionally
+  requires `N` (number of trials run) and `V` (variance of Sharpe *across*
+  trials); a single aggregated walk-forward curve supplies **neither**. Resolve
+  the `V` source: either run reduced CPCV (**D-016**) to obtain a path
+  distribution, **or** define the trial set explicitly (walk-forward folds + the
+  two dual arms + the four baselines) and estimate `V` from it. Logging every
+  configuration to MLflow is what supplies `N`. Also reference the breakeven as
+  the **cost-adjusted** value (D-007 added detail), not the bare 38.5%. Finalize
+  K, N, the DSR confidence, the PBO ceiling (consider adding a `PBO < 0.2`
+  clause), and the `V` source before Phase E begins.
 
 ## D-009 — Loss function
 
@@ -236,6 +298,16 @@ This guarantees the output schema is always correct without rejecting recoverabl
   relies on. No reason to alter it.
 - **Recorded alternative.** A standard (non-directional) ATR — would break
   comparability and discard a sound design; not used.
+- **Added detail (2026-05-25) — estimator-faithfulness footnote.** For the
+  record: López de Prado's reference sets the volatility target `trgt` to an
+  **EWMA standard deviation of close-to-close returns**, not to ATR. ATR is built
+  from the high / low / previous-close true range and is a different (though
+  closely related) estimator. We deliberately **retain** v1's pATR for
+  faithfulness; the EWMA-of-returns alternative is noted and **not adopted**. No
+  methodology conflict — only an explicit acknowledgment that `trgt ≡ pATR` is a
+  chosen estimator, not the book's default. (For reference, the true-range term
+  is `TR_t = max[H_t − L_t, |H_t − C_{t-1}|, |L_t − C_{t-1}|]`, with the gap
+  terms capturing between-bar jumps.)
 
 ## D-013 — Feature-selection scope
 
@@ -253,3 +325,98 @@ This guarantees the output schema is always correct without rejecting recoverabl
   method is fine; only the scope is wrong. Per-fold selection is required by the
   hard rules; global selection survives only to measure the leak.
 - **Recorded alternative.** v1 global selection on 90% of data — probe only.
+
+## D-014 — Meta-labeling (side / size decomposition)
+
+- **Date:** 2026-05-25 — **Phase:** E (decided in B) — **Status:** Proposed
+  (ratify Layer-1 vs Layer-2 placement before Phase E)
+- **Decision.** Model the target as **side then size**. The primary model
+  (`ConvWideDeepLSTMNet`) predicts direction; a separate **binary meta-model**,
+  trained only on bars where the primary takes a position (`ŝ_t ≠ 0`), predicts
+  `m_t = 1[ŝ_t = y_t]` (was the primary's call correct) and outputs a calibrated
+  probability used to **filter and size** the bet. Act iff `p̂(m=1) > breakeven`
+  (D-007, cost-adjusted), and size by conviction above breakeven. This absorbs
+  the no-touch (`0`) class as "primary wrong → don't act," resolving the open
+  head-architecture question in D-003. Primary model tuned for **high recall**;
+  meta-model supplies **precision**.
+- **v1 behavior.** None — v1 used a single model/head for direction with no
+  separate act/size stage; the scalar output was thresholded post-hoc (D-009).
+- **Verdict.** New (honest-arm layer; v1 single-stage retained as comparison via
+  D-009).
+- **Rationale.** With a ~76% majority `0` class, a single multiclass head spends
+  capacity on non-events. Decoupling lets the primary lock recall while the
+  meta-model raises precision *without* re-introducing false negatives among
+  caught signals — dominating a single model on F1 at the same recall. The action
+  threshold becomes **derived** (breakeven) rather than searched. Sizing uses
+  de Prado's probability→size map, **recentred on the breakeven** (≈0.385) rather
+  than 0.5 — the symmetric-payoff centring is wrong for a 4 : 2.5 payoff and
+  would contradict the economic decision near `p = 0.45`.
+- **Recorded alternative.** Single-stage three-class / scalar head (v1, D-009) —
+  kept as comparison arm. If meta-labeling is deferred to Layer 2, fall back to
+  the directional collapse with `0` folded into "no-trade," and revisit.
+
+## D-015 — Labeling event filter (sampling cadence)
+
+- **Date:** 2026-05-25 — **Phase:** B — **Status:** Proposed (pin `κ`; confirm
+  scope for Layer 1)
+- **Decision.** Honest arm samples decision points with a **symmetric CUSUM
+  filter** on de-meaned 15m returns: `S⁺_t = max(0, S⁺_{t-1} + r_t − E[r_t])`,
+  `S⁻_t = min(0, S⁻_{t-1} + r_t − E[r_t])`, emit a labeling event (and reset)
+  when `S⁺_t ≥ κ` or `S⁻_t ≤ −κ`. v1-faithful arm: the fixed
+  one-label-per-15m-close cadence (D-002). This layers *on top of* D-002 — D-002
+  fixes the clock; D-015 chooses which ticks become labeled events.
+- **v1 behavior.** None — v1 labels every 15m bar (D-002); no activity-based
+  event sampling.
+- **Verdict.** New (fork; high value — alters class balance and `N_eff`).
+- **Rationale.** Clock sampling labels dead, sideways bars that inflate the `0`
+  class and worsen overlap (lowering `N_eff`). CUSUM samples more in
+  trending/volatile regimes and less when price drifts, preferentially dropping
+  likely-timeout bars. Measure in B.2: timeout fraction, ±1 share, average
+  uniqueness / `N_eff` per fold span; the arm-to-arm class-balance shift is itself
+  a finding. Recommend a **pATR-scaled `κ`** so the trigger breathes with
+  volatility (D-012 units). The filter uses past returns only — no look-ahead.
+- **Recorded alternative.** Fixed 15m-close cadence (v1, D-002) — the comparison
+  arm and the default if CUSUM is descoped from Layer 1.
+
+## D-016 — Backtest geometry: walk-forward vs. CPCV
+
+- **Date:** 2026-05-25 — **Phase:** C (decided in B) — **Status:** Proposed
+  (compute-gated)
+- **Decision.** Primary backtester = single-path purged + embargoed
+  **walk-forward** (D-010). Run **Combinatorial Purged CV (CPCV)** in a *reduced*
+  configuration — on the four baselines and a reduced-epoch model — to obtain the
+  distribution of out-of-sample Sharpe across `φ = C(N−1, k−1)` paths, supplying
+  the across-trial variance `V` the Deflated Sharpe needs (D-008). The headline
+  deep model reports its walk-forward point.
+- **v1 behavior.** None — single chronological split, single Sharpe (subsumed by
+  D-010's comparison arm); no path distribution.
+- **Verdict.** New (fork; compute-gated).
+- **Rationale.** One walk-forward run = one equity curve = one Sharpe = a size-1
+  sample; it yields neither an honest CI nor the across-trial `V` in the DSR
+  formula. CPCV with `N` groups and `k` held out gives many full-length OOS paths
+  and thus a Sharpe distribution. Full CPCV on the deep model costs
+  `C(N,k)/k ×` the training budget (likely prohibitive), so cheap models
+  characterize `V` while the expensive model reports a walk-forward point.
+  Directly enables the D-008 tightening (DSR > 0.95).
+- **Recorded alternative.** Walk-forward only, no CPCV — acceptable **iff** `V`
+  is instead estimated from folds + the two dual arms + the four baselines treated
+  as the trial set; record the chosen `V` source in D-008.
+
+## D-017 — Time-decay on sample weights
+
+- **Date:** 2026-05-25 — **Phase:** B — **Status:** Accepted (resolved to "off")
+- **Decision.** **No time decay** in Layer 1. Final weight = `class × uniqueness`
+  (D-005) with de Prado's piecewise-linear decay on cumulative uniqueness disabled
+  (`c = 1`).
+- **v1 behavior.** No time decay either — so there is no faithfulness conflict;
+  this entry documents that the honest arm *also* declines it, by reasoned choice
+  rather than oversight.
+- **Verdict.** New (an explicit decision to do less).
+- **Rationale.** Decay down-weights older observations to address
+  non-stationarity, but (a) walk-forward retraining already adapts to regime drift
+  per fold, and (b) `N_eff` is already small from 511-bar overlap — decay would
+  shrink it further and widen every CI for marginal regime-adaptation gain. The
+  cost/benefit favors preserving `N_eff`.
+- **Recorded alternative.** Mild decay `c ∈ [0.5, 1)` — revisit only if B.2's
+  per-quarter class distribution shows regime drift the walk-forward folds do not
+  absorb.
