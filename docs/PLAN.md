@@ -9,46 +9,42 @@ Layer 1 produces results worth engineering around.
 ## Dual-arm methodology (cross-cutting)
 
 The single most important methodological commitment in Layer 1, applied from
-Phase B onward. Every place where v1 made a choice that we want to improve on,
-we keep **both**:
+Phase B onward.
+Every place where v1 made a choice that we want to improve on, we keep **both**:
 
 - **v1-faithful arm** — reproduces the v1 decision exactly, so any comparison
   against v1's reported numbers is valid.
 - **Honest arm** — the methodologically correct version, which is the primary
   result of the project.
 
-Both arms run through the **same** harness (Phase C). The number we trust is the
-honest arm; the number we report *alongside* it is the v1-faithful arm; and the
-**gap between them is a finding** — it quantifies how much of v1's apparent edge
-was leakage, optimistic fills, or selection bias rather than signal.
+Both arms run through the **same** harness (Phase C).
+The number we trust is the honest arm; the number we report *alongside* it is the v1-faithful arm; and the **gap between them is a finding** — it quantifies how much of v1's apparent edge was leakage, optimistic fills, or selection bias rather than signal.
 
-Four decisions resolve to a deliberate **leakage probe** rather than two
-co-existing options, because the v1 choice is a defect, not a design: embargo
-(D-004), barrier-touch resolution (D-006), walk-forward geometry (D-010), and
-feature-selection scope (D-013). For these, the honest arm is primary and the v1
-configuration is run *once* to measure the inflation, then retired. See
-`DECISIONS.md` D-001 for the governing rule and D-002…D-014 for each case.
+Four decisions resolve to a deliberate **leakage probe** rather than two co-existing options, because the v1 choice is a defect, not a design:
+embargo, barrier-touch resolution, walk-forward geometry, and feature-selection scope.
+For these, the honest arm is primary and the v1 configuration is run *once* to measure the inflation, then retired.
+See `DECISIONS.md` for the governing rules.
 
 ---
 
 ## Phase A — Foundation: data, repo, environment
 
-**Goal:** Have a clean repo, a reproducible environment, and validated raw data
-on disk. No modeling yet.
+**Goal:**
+Have a clean repo, a reproducible environment, and validated raw data on disk.
+No modeling yet.
 
 **Key deliverables:**
 
 - Repo skeleton with `pyproject.toml` (uv-managed), `CLAUDE.md`, `VISION.md`,
   `DECISIONS.md`, `LEARNINGS.md`, `README.md` stub
-- Raw OHLCV data for BTC/USDT (4h, 1h, 15m, 1m) downloaded from Binance, with
-  checksum verification. 1m is a first-class timeframe, not a convenience copy:
-  it is the substrate for barrier-touch resolution in Phase B.
-- Data integrity checks: no duplicates, no gaps unaccounted for, timezone
-  consistent, schema documented, **cross-timeframe grid alignment verified**
+- Raw OHLCV data for BTC/USDT (4h, 1h, 15m, 1m) downloaded from Binance, with checksum verification.
+1m is a first-class timeframe and the substrate for barrier-touch resolution in Phase B.
+- Data integrity checks:
+no duplicates, no gaps unaccounted for, timezone consistent, schema documented, **cross-timeframe grid alignment verified**
 - A Polars-based data loader with tests
 
-**What's deliberately deferred:** feature engineering, target definition,
-indicators. All of that is Phase B and later.
+**What's deliberately deferred:** feature engineering, target definition, indicators.
+All of that is Phase B and later.
 
 See `PHASE_A.md` for the full breakdown.
 
@@ -56,7 +52,8 @@ See `PHASE_A.md` for the full breakdown.
 
 ## Phase B — Target definition and split design
 
-**Goal:** Define the prediction target rigorously, design walk-forward splits
+**Goal:**
+Define the prediction target rigorously, design walk-forward splits
 that respect the temporal structure *and* the label horizon, and lock in the
 evaluation-harness skeleton *before* writing any model.
 
@@ -65,26 +62,17 @@ evaluation-harness skeleton *before* writing any model.
 - Triple-barrier target function (pATR-based, three-class `-1/0/+1`, 511-bar
   horizon, matching v1 semantics) with tests — **1m-resolved barrier ordering
   primary**, 15m-optimistic ordering retained as the v1-faithful comparison arm
-- Documented target statistics: positive rate, **timeout (no-touch) rate**,
-  distribution over time, regime shifts; the **38.5% breakeven reference**
-  written down explicitly
-- Walk-forward CV scheme implemented and tested, with **purging + embargo
-  (embargo ≥ 511 bars, the full label horizon)**; the v1 single 75/15/10
-  chronological split retained as a comparison configuration
-- **Sample-uniqueness weighting** (López de Prado average uniqueness) layered on
-  top of v1's class-imbalance weights, plus an **effective-N adjustment** for
-  confidence intervals on test metrics
-- A `splits.py` module that's the single source of truth for what's train,
-  val, and test for every fold
+- Documented target statistics:
+positive rate, **timeout (no-touch) rate**, distribution over time, regime shifts; the **38.5% breakeven reference** written down explicitly
+- Walk-forward CV scheme implemented and tested, with **purging + embargo (embargo ≥ 511 bars, the full label horizon)**;
+the v1 single 75/15/10 chronological split retained as a comparison configuration
+- **Sample-uniqueness weighting** (López de Prado average uniqueness) layered on top of v1's class-imbalance weights, plus an **effective-N adjustment** for confidence intervals on test metrics
+- A `splits.py` module that's the single source of truth for what's train, val, and test for every fold
 - A **pre-registered success threshold** committed before any model is trained
-- Decision-log entries explaining target, no-touch handling, horizon, embargo,
-  uniqueness, fold count, and the pre-registered bar
+- Decision-log entries explaining target, no-touch handling, horizon, embargo, uniqueness, fold count, and the pre-registered bar
 
-**Learning component:** ~8 hours reading López de Prado **chapters 3 (labeling),
-4 (sample weights / uniqueness), and 7 (cross-validation in finance)** before
-implementing, plus a skim of **chapters 11–12 (backtest overfitting, CSCV/PBO,
-Deflated Sharpe Ratio)** to inform the success threshold and reporting. This is
-the most important learning investment in Layer 1.
+**Learning component:** ~8 hours reading López de Prado **chapters 3 (labeling), 4 (sample weights / uniqueness), and 7 (cross-validation in finance)** before implementing, plus a skim of **chapters 11–12 (backtest overfitting, CSCV/PBO, Deflated Sharpe Ratio)** to inform the success threshold and reporting.
+This is the most important learning investment in Layer 1.
 
 See `PHASE_B.md` for the full breakdown.
 
