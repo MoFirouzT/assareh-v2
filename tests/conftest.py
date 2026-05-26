@@ -86,6 +86,10 @@ def synthetic_ohlcv():
         if "price_out_of_bounds" in issues:
             closes[0] = 50.0  # below the $100 lower bound
 
+        if "off_grid" in issues:
+            # shift one bar by 30 seconds — no longer on a 1m boundary
+            times[rows // 2] = times[rows // 2] + timedelta(seconds=30)
+
         return pl.DataFrame(
             {
                 "open_time": times,

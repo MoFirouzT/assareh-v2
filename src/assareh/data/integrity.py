@@ -5,7 +5,7 @@ from typing import cast
 
 import polars as pl
 
-from assareh.data.schemas import GapRecord, IntegrityReport
+from assareh.data.schemas import CrossTimeframeReport, GapRecord, IntegrityReport
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +148,102 @@ def check_integrity(df: pl.DataFrame, timeframe: str) -> IntegrityReport:
         price_max=price_max,
         ohlc_violation_count=ohlc_violation_count,
         nan_counts=nan_counts,
+        passed=len(hard_failures) == 0,
+        hard_failures=hard_failures,
+    )
+
+
+def check_cross_timeframe_alignment(
+    dfs: dict[str, pl.DataFrame],
+) -> CrossTimeframeReport:
+    """Check that all timeframes share a consistent grid against the 1m reference.
+
+    Hard failure: any coarser-tf open_time not present on the 1m grid.
+    Soft: spacing deviations per timeframe, coverage notes.
+    """
+    reference_tf = "1m"
+    hard_failures: list[str] = []
+    misaligned_opens: dict[str, int] = {}
+    spacing_violations: dict[str, int] = {}
+    coverage_mismatch: dict[str, str] = {}
+
+    if reference_tf not in dfs:
+        hard_failures.append(f"Reference timeframe '{reference_tf}' not present in dfs")
+        return CrossTimeframeReport(
+            reference_timeframe=reference_tf,
+            misaligned_opens=misaligned_opens,
+            spacing_violations=spacing_violations,
+            coverage_mismatch=coverage_mismatch,
+            passed=False,
+            hard_failures=hard_failures,
+        )
+
+    ref_df = dfs[reference_tf]
+    ref_start = cast(datetime, ref_df["open_time"].min())
+    ref_end = cast(datetime, ref_df["open_time"].max())
+
+    # Spacing violations for every timeframe (same logic as gaps, cross-checked direction)
+    for tf, df in dfs.items():
+        nominal_us = int(_parse_interval(tf).total_seconds() * 1_000_000)
+        n_viol = (
+            df.lazy()
+            .select(pl.col("open_time").diff().dt.total_microseconds().alias("d"))
+            .drop_nulls()
+            .filter(pl.col("d") != nominal_us)
+            .collect()
+            .height
+        )
+        spacing_violations[tf] = n_viol
+
+    # Grid containment and coverage for coarser timeframes.
+    # "On the 1m grid" is a mathematical property: the timestamp must be an
+    # exact multiple of 1 minute from the UTC epoch (seconds == 0 and
+    # microseconds == 0 when expressed as a Unix timestamp mod 60s).
+    # Using a modulo check rather than an anti-join against the 1m series
+    # separates genuine off-grid timestamps from 1m coverage gaps, which
+    # are two distinct issues.
+    one_minute_us = int(_parse_interval(reference_tf).total_seconds() * 1_000_000)
+    for tf, df in dfs.items():
+        if tf == reference_tf:
+            continue
+
+        # Hard check: every coarser open_time must be at a whole-minute boundary
+        n_misaligned = (
+            df.lazy()
+            .select((pl.col("open_time").cast(pl.Int64) % one_minute_us).alias("mod"))
+            .filter(pl.col("mod") != 0)
+            .collect()
+            .height
+        )
+        misaligned_opens[tf] = n_misaligned
+        if n_misaligned > 0:
+            hard_failures.append(
+                f"{tf}: {n_misaligned} open_time(s) not on the {reference_tf} grid"
+            )
+
+        # Coverage note: describe the overlap with the reference
+        tf_start = cast(datetime, df["open_time"].min())
+        tf_end = cast(datetime, df["open_time"].max())
+        overlap_start = max(ref_start, tf_start)
+        overlap_end = min(ref_end, tf_end)
+        if overlap_start > overlap_end:
+            coverage_mismatch[tf] = (
+                f"no overlap with {reference_tf} "
+                f"[{ref_start.date()}, {ref_end.date()}]"
+            )
+        else:
+            coverage_mismatch[tf] = f"overlap [{overlap_start.date()}, {overlap_end.date()}]"
+
+    logger.info(
+        "Cross-timeframe alignment: hard_failures=%d, misaligned_opens=%s",
+        len(hard_failures),
+        misaligned_opens,
+    )
+    return CrossTimeframeReport(
+        reference_timeframe=reference_tf,
+        misaligned_opens=misaligned_opens,
+        spacing_violations=spacing_violations,
+        coverage_mismatch=coverage_mismatch,
         passed=len(hard_failures) == 0,
         hard_failures=hard_failures,
     )

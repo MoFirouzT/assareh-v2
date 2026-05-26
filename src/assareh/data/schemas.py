@@ -39,3 +39,14 @@ class IntegrityReport(BaseModel):
     nan_counts: dict[str, int]
     passed: bool
     hard_failures: list[str]
+
+
+class CrossTimeframeReport(BaseModel):
+    """Result of checking that the four timeframes share a consistent grid."""
+
+    reference_timeframe: str            # e.g. "1m"
+    misaligned_opens: dict[str, int]    # per coarser tf: count of opens not on the finer grid
+    spacing_violations: dict[str, int]  # per tf: bars whose spacing != nominal interval
+    coverage_mismatch: dict[str, str]   # per tf: human note on date-range overlap
+    passed: bool
+    hard_failures: list[str]
