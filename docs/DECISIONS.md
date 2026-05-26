@@ -420,3 +420,186 @@ This guarantees the output schema is always correct without rejecting recoverabl
 - **Recorded alternative.** Mild decay `c ∈ [0.5, 1)` — revisit only if B.2's
   per-quarter class distribution shows regime drift the walk-forward folds do not
   absorb.
+
+## D-018 — Grid containment check: modulo arithmetic over presence-based anti-join
+
+- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Decision.** `check_cross_timeframe_alignment` determines whether a
+  coarser-tf `open_time` is "on the 1m grid" via a **modulo check**:
+  `open_time_us % 60_000_000 == 0` (i.e., the timestamp is an exact
+  whole-minute boundary from the UTC epoch). The initial implementation used
+  an **anti-join** against the 1m series instead.
+- **v1 behavior.** No cross-timeframe alignment check existed.
+- **Verdict.** Adopt modulo (corrects the anti-join).
+- **Rationale.** An anti-join conflates two structurally different problems:
+  (a) a coarser-tf bar whose timestamp is not at a minute boundary — a genuine
+  grid defect — and (b) a coarser-tf bar at a clean minute boundary that
+  simply has no matching 1m row because the 1m series has a coverage gap at
+  that moment. Conflating them produces misleading counts and wrong attribution:
+  in practice the anti-join reported 1,366 15m "failures" when only 81 were
+  genuine (the rest were 1m coverage gaps already caught by `check_integrity`).
+  Modulo isolates (a) cleanly; (b) is already covered by gap detection.
+- **Recorded alternative.** Presence-based anti-join against the 1m series —
+  conflates timestamp defects with 1m coverage gaps; rejected.
+
+## D-019 — CHECKSUM verification: soft on missing files
+
+- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Decision.** When fetching a Binance Vision ZIP, attempt to retrieve the
+  co-located `.CHECKSUM` file. If the file is **absent** (HTTP 404 or any
+  fetch error), log a warning and proceed. If the file **is present**, verify
+  the SHA-256 and **hard-fail** on mismatch. Log every verified hash to
+  `data/raw/checksums.jsonl`; log nothing when no checksum was available.
+- **v1 behavior.** No checksum verification of any kind.
+- **Verdict.** New.
+- **Rationale.** Binance Vision does not consistently provide `.CHECKSUM`
+  files for older archives — hard-requiring them would block most historical
+  back-fills. The protection is asymmetric and honest: a present checksum is
+  always enforced (strong guard); a missing checksum is an absence of
+  guarantee, not evidence of corruption. The audit log is only written when a
+  checksum was actually verified, so it never overstates coverage.
+- **Recorded alternative.** Always require a checksum — blocks historical
+  downloads for the majority of the dataset; rejected.
+
+## D-020 — ccxt tail bars: zero-fill missing ancillary columns
+
+- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Decision.** When the tail is filled via ccxt (`_fetch_ccxt_ohlcv`), set
+  `number_of_trades`, `taker_buy_base_volume`, and `taker_buy_quote_volume`
+  to **`0`** (integer / float zero) rather than `NaN` / `null`.
+- **v1 behavior.** These columns were not part of v1's schema; the question
+  did not arise.
+- **Verdict.** New.
+- **Rationale.** The ccxt `fetch_ohlcv` response carries only five OHLCV
+  columns; the three ancillary fields are unavailable. Zero is preferred over
+  NaN because (a) the canonical `OHLCV_SCHEMA` types are non-nullable
+  (`Int64` / `Float64`), making NaN harder to propagate cleanly, and (b) a
+  structural zero is **explicitly detectable** in Phase D feature engineering
+  (`col > 0` guard or a `has_ancillary` boolean flag), whereas NaN can
+  silently propagate through indicator calculations producing harder-to-trace
+  artifacts. The consequence — a small number of recent tail bars carry
+  meaningless zeros in these three columns — is documented in L-003 and must
+  be guarded in Phase D.
+- **Recorded alternative.** NaN / null fill — propagates unpredictably
+  through floating-point indicator math; rejected in favour of an explicit
+  zero that can be detected and filtered deterministically.
+
+## D-021 — OHLCV schema: 9 columns
+
+- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Decision.** The canonical `OHLCV_SCHEMA` keeps **9 of the 12 columns**
+  from a Binance Vision klines CSV:
+  `open_time, open, high, low, close, volume, close_time, number_of_trades,
+  taker_buy_base_volume, taker_buy_quote_volume`.
+  Dropped: `quote_asset_volume` (col 7), `taker_buy_base_asset_volume` alias
+  (col 9, renamed on ingest), and `ignore` (col 11).
+- **v1 behavior.** v1 kept 6 columns (OHLCV + open_time); the three
+  ancillary columns were absent from its schema.
+- **Verdict.** New (richer schema).
+- **Rationale.** `close_time` pins the bar's exact close boundary, needed
+  for Phase B barrier resolution. `number_of_trades` and the taker-buy pair
+  encode order-flow composition (aggressor-side volume fraction) that may
+  contribute features in Phase D. `quote_asset_volume` is dropped because it
+  is reconstructible as `close × volume` and adds no information; `ignore` is
+  a Binance placeholder with no defined semantics.
+- **Recorded alternative.** 6-column OHLCV-only (v1) — loses order-flow
+  signal and the close-time boundary pin; retained as a comparison point for
+  feature-ablation only.
+
+## D-022 — Integrity check severity taxonomy: physically-impossible = hard, market-real = soft
+
+- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Decision.** The governing rule for `check_integrity` severity
+  classification:
+  - **Hard failure** — condition is *physically impossible* or indicates
+    source corruption / parse error. Flips `passed = False`. Downstream code
+    may not safely use data that triggered a hard failure.
+    *Checks:* duplicate `open_time`s, non-monotonic timestamps, NaN/null in
+    any OHLC column, OHLC arithmetic violation (`high < max(O, C)` or
+    `low > min(O, C)`), close price outside sanity bounds, negative volume,
+    `open_time` not UTC-aware.
+  - **Soft observation** — condition is anomalous but *can occur in real
+    market data*. Counted and surfaced in the report; `passed` unaffected.
+    *Checks:* gaps > 1 interval, zero-volume bars, OHLC-equal bars
+    (O=H=L=C), NaN in ancillary columns.
+- **v1 behavior.** No integrity layer; data was used as-is.
+- **Verdict.** New (governing).
+- **Rationale.** Hard failures indicate the data source cannot be trusted
+  and must be investigated before any analysis. Soft observations are real
+  market events — exchange maintenance windows create genuine gaps; thin
+  early markets produce genuine zero-volume minutes — and silently filtering
+  them would distort analysis. The separation makes the contract explicit:
+  a `passed = True` report is a meaningful guarantee, not a vacuous one.
+- **Recorded alternative.** Treat every anomaly as a hard failure — would
+  reject real-but-anomalous data (e.g., a single maintenance gap) and make
+  the dataset effectively unusable; rejected.
+
+## D-023 — Price sanity bounds: close ∈ [100, 1 000 000] for BTC/USDT
+
+- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Decision.** Flag `close < 100` or `close > 1_000_000` as a **hard
+  integrity failure**.
+- **v1 behavior.** No price-range check.
+- **Verdict.** New.
+- **Rationale.** BTC/USDT has ranged from ~$3,200 (2018–2019 bear lows) to
+  ~$126,000 (2025 high observed in the dataset). The bounds $100 and
+  $1,000,000 span this range with wide margin on both sides, catching unit
+  errors (e.g., price expressed in cents: a $30,000 BTC price would appear
+  as $300, below $3,200 but above $100 — caught) and source corruption, with
+  no realistic risk of a false positive at any foreseeable BTC price. The
+  range is deliberately asymmetric: the lower bound is more important because
+  unit confusion and parse errors almost always produce anomalously small
+  values.
+- **Recorded alternative.** No bounds check (v1) — silently accepts
+  corrupted or unit-confused prices; rejected. Tighter upper bound (e.g.,
+  $500,000) — introduces false-positive risk during price discovery at new
+  ATHs; rejected.
+
+## D-024 — Gap handling: soft observation, never forward-fill
+
+- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Decision.** Gaps (missing bars where the expected bar is absent) are
+  recorded in `IntegrityReport.gaps` as soft observations and the DataFrame
+  is returned unmodified. Forward-filling, interpolation, or any other
+  synthetic bar insertion is explicitly rejected at the data layer.
+- **v1 behavior.** v1 did not have an integrity layer; gap handling was
+  implicit and unspecified.
+- **Verdict.** New.
+- **Rationale.** Gaps represent real market events — scheduled exchange
+  maintenance, unscheduled outages, circuit breakers. A manufactured
+  forward-filled bar has stale prices (wrong), volume = 0 (wrong), and a
+  close_time that was never a real trading period. Any downstream phase that
+  must handle a gap (Phase B barrier resolution skips to the next real bar;
+  Phase D feature windows may need to flag the disruption) should do so
+  explicitly and locally, with full knowledge that a gap occurred. Silently
+  patching the data layer removes that knowledge.
+- **Recorded alternative.** Forward-fill with previous bar's close — creates
+  fictitious bars that distort volume-based features, OHLC arithmetic, and
+  any volatility estimator; rejected.
+
+## D-025 — Cross-timeframe alignment check severity: grid containment HARD, spacing and coverage SOFT
+
+- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Decision.** The three sub-checks inside `check_cross_timeframe_alignment`
+  have different severity:
+  - **Grid containment** (coarser-tf `open_time` not at a whole-minute
+    boundary): **HARD FAILURE**. Recorded per-timeframe in `misaligned_opens`.
+  - **Nominal spacing violations** (spacing between consecutive bars ≠
+    nominal interval): **SOFT**. Recorded in `spacing_violations`; these are
+    the same events as per-timeframe gaps viewed from a different direction.
+  - **Coverage overlap** (date-range mismatch between timeframes): **SOFT,
+    informational**. Recorded as a human note in `coverage_mismatch`.
+- **v1 behavior.** No cross-timeframe alignment check existed.
+- **Verdict.** New.
+- **Rationale.** An off-grid coarser-tf timestamp is an unrecoverable
+  structural defect: Phase D's backward as-of joins and Phase B's 1m
+  barrier-resolution scans both assume that a 15m/1h/4h bar's `open_time`
+  is exactly a minute boundary that can be located in the 1m grid. A
+  fractional-second offset silently causes a one-bar anchor error with no
+  runtime signal. Spacing violations and coverage mismatches are real but
+  survivable — gaps are already handled by `check_integrity`, and downstream
+  phases operate only on the common coverage span anyway.
+- **Recorded alternative.** All three checks as hard failures — would
+  hard-fail on the known Binance early-data timestamp anomaly (L-001)
+  without delivering additional protection, since the anomaly is fully
+  characterised and its downstream impact is bounded; rejected.
