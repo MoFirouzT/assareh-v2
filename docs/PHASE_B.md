@@ -16,6 +16,93 @@ Everything here decides whether the eventual model's numbers will mean anything.
 
 ---
 
+## Module layout (D-030)
+
+Phase B introduces the following modules. Pin these paths now so all of B.1–B.4
+land in agreed locations; downstream phases import from them:
+
+```text
+src/assareh/
+  features/
+    patr.py            # B.0 — multi-timeframe pATR (D-012, D-026, D-031)
+  labels/
+    targets.py         # B.1 — make_labels, LabelResult
+    diagnostics.py     # B.2 — target_stats helper
+  splits/
+    splits.py          # B.3 — Fold, make_walkforward_folds
+    weights.py         # B.3 — average_uniqueness, n_eff_kish, renormalize
+notebooks/
+  target_diagnostics.ipynb   # B.2
+tests/
+  test_patr.py          # B.0
+  test_targets.py       # B.1
+  test_splits.py        # B.3
+  test_weights.py       # B.3
+  conftest.py           # extended — see B.1 Tests
+```
+
+---
+
+## B.0 — Multi-timeframe pATR (prerequisite)
+
+`make_labels` requires the two pATR series attached to the 15m frame. The pATR
+formula is locked (D-012); the multi-timeframe split is locked (D-026); the
+module path is locked (D-031).
+
+```python
+# src/assareh/features/patr.py
+
+def attach_patr(
+    df15: pl.DataFrame,
+    df1m: pl.DataFrame,
+    *,
+    window: int = 10,
+    timeframes_minutes: tuple[int, ...] = (15, 60, 240),
+) -> pl.DataFrame:
+    """Return df15 with patr_<tf> columns attached, one per requested timeframe.
+
+    For each timeframe `tf` in `timeframes_minutes`, computes proportional ATR
+    via Wilder smoothing (window=10), directional true range via the `up_first`
+    flag derived from 1m sub-candles within each tf bar, then as-of joins onto
+    the 15m clock. Higher-timeframe pATR series are lagged by v1's `shift(3)`
+    guard before the join — see Q4 below.
+    """
+```
+
+Default output adds `patr_15`, `patr_60`, `patr_240` to `df15`. Phase D may
+extend `timeframes_minutes`; Phase B only needs `patr_60` and `patr_240` (the
+defaults for stop and target per D-026).
+
+> **Open question — Q4 (`shift(3)` mechanics).** v1's `shift(3)` lag on higher-
+> timeframe pATR is preserved (D-012), but the exact shift unit — 3 bars of the
+> higher tf vs. 3 bars of the 15m clock — has not been pinned in v2. Investigate
+> during B.0 implementation by inspecting v1's `IndicatorEngineer` /
+> `FeatureEngineer`; record the verdict and rationale as a new DECISIONS.md
+> entry before B.0 is marked done. Until then, `attach_patr` must accept a
+> `shift_higher_tf_bars: int = 3` parameter that is **explicitly applied in the
+> higher tf** as the working hypothesis.
+
+### B.0 Tests
+
+- Wilder recurrence: `attach_patr` on a hand-built OHLCV series matches the
+  closed-form `pATR[i] = (pATR[i-1]·(n-1) + pTR[i]) / n` with `n=10` to within
+  float tolerance.
+- Gap-term coverage: a synthetic series with a between-bar jump exercises the
+  `|H − C_prev|` / `|L − C_prev|` terms of the true range.
+- `up_first` determinism: a 15m bar whose 1m sub-candles trend cleanly up has
+  `up_first = 1`; cleanly down has `up_first = 0`; mixed paths resolve by the
+  sign of the net move.
+- `shift_higher_tf_bars` invariance: with `shift_higher_tf_bars=0` and equal
+  timeframes, `patr_15 == patr_native_on_15m` (sanity).
+
+### B.0 Definition of done
+
+- `attach_patr` returns the canonical three pATR columns on the 15m frame
+- Tests pass; Q4 resolution is committed to DECISIONS.md
+- D-012, D-026, D-031 reflected; module path matches the layout above
+
+---
+
 ## B.1 — Target definition
 
 ### What it is
@@ -30,10 +117,19 @@ The v1 three-class triple-barrier label, rebuilt cleanly with tests:
   touched first, `0` if neither is touched before the horizon expires
 - **Decision cadence:** one label per 15m bar close (D-002)
 
-pATR is the v1 proportional ATR (Wilder smoothing, window 10, directional true
-range via the `up_first` flag from 1m sub-candles). It is reproduced exactly and
-locked — see D-012. Keep v1's `shift(3)` lag on higher-timeframe pATR; it is the
-existing guard against current-bar bleed.
+pATR is produced by `attach_patr` (B.0). The formula is locked to D-012 and
+the multi-timeframe split below is locked to D-026.
+
+**Multi-timeframe pATR (D-026).** The profit target and the stop are anchored on
+*different* pATR timeframes: a **longer-horizon pATR** scales the target (slow,
+wide — only large moves relative to the medium-term regime count as wins) and a
+**shorter-horizon pATR** scales the stop (reactive — tightens in volatile
+regimes, widens in calm). The defaults follow v1's `TargetExtractor3`:
+`target_patr = patr_240` (4h smoothing), `stop_patr = patr_60` (1h smoothing).
+`make_labels` takes the two pATR columns separately; the asymmetry is
+deliberate, not a code smell. The single-timeframe `target_patr == stop_patr ==
+native_patr` configuration is retained as the v1-`TargetExtractor1` comparison
+point, not as the default.
 
 ### The one place we improve on v1: barrier-touch resolution (D-006)
 
@@ -53,22 +149,35 @@ We have 1m data. So:
 Both arms produce a label per decision point. The pipeline records, per arm:
 
 1. the label series, and
-2. the **same-bar-ambiguity rate** — what fraction of touches required a tie-
-   break — which bounds how much the two arms can possibly diverge.
+2. the **same-bar-ambiguity rate** — what fraction of touches required a
+   tie-break — logged at **both** the 15m and 1m grain (D-006 added detail).
+   The 15m rate bounds how much the two arms can diverge; the 1m rate is
+   the residual ambiguity inside a single 1m bar that straddles both
+   barriers, and bounds the irreducible bias of the honest arm itself.
 
 ```python
 def make_labels(
-    df15: pl.DataFrame,            # 15m decision clock, pATR attached
+    df15: pl.DataFrame,            # 15m decision clock, with target_patr & stop_patr columns attached
     df1m: pl.DataFrame,            # 1m barrier-resolution substrate
     *,
+    target_patr_col: str = "patr_240",  # longer-horizon pATR scales the profit target (D-026)
+    stop_patr_col:   str = "patr_60",   # shorter-horizon pATR scales the stop (D-026)
     m_target: float = 4.0,
     m_stop: float = 2.5,
     horizon_bars: int = 511,
     resolution: Literal["1m", "15m"] = "1m",   # "15m" == v1-faithful arm
     target2: bool = True,          # produce meta-label (target3) alongside side (rt3)
-    stop2_slack: float = 1.0,      # stop2 = (1 − (m_stop + slack) × pATR) × price
+    stop2_slack: float = 1.0,      # stop2 = (1 − (m_stop + slack) × stop_patr) × price
 ) -> LabelResult:
     """Triple-barrier labels. resolution selects honest vs v1-faithful arm.
+
+    Barrier construction (D-026, multi-timeframe pATR):
+      profit_level = (1 + m_target × df15[target_patr_col]) × entry_price
+      stop_level   = (1 − m_stop   × df15[stop_patr_col])   × entry_price
+      stop2_level  = (1 − (m_stop + stop2_slack) × df15[stop_patr_col]) × entry_price
+
+    Setting target_patr_col == stop_patr_col reproduces the single-timeframe
+    v1-`TargetExtractor1` configuration (comparison only; not the default).
 
     When target2=True, returns both:
       - rt3  : raw first crossing in {-1, 0, +1}  — the side / primary label
@@ -76,9 +185,13 @@ def make_labels(
                   0 when stop2 (slack-expanded stop) is touched first.
     When target2=False, target3 == rt3 (no meta-label filtering).
 
-    Also returns the per-decision first-touch bar index, the same-bar
-    ambiguity rate, and stop2 levels. Tail rows whose horizon window is
-    incomplete are returned as a null/sentinel label and dropped downstream.
+    Also returns the per-decision first-touch bar index and same-bar
+    ambiguity rates **at both the 15m and 1m grain** (D-006 added detail —
+    the 1m rate bounds the irreducible residual bias of the honest arm) and
+    the stop2 levels. Tail rows whose horizon window is incomplete carry
+    `rt3 = null`, `target3 = null`, `is_complete = False` (D-029); they remain
+    in the frame so the index stays aligned to the 15m clock and consumers
+    filter on `is_complete` at the boundary.
     """
 ```
 
@@ -88,6 +201,90 @@ meta-label filter. Both are needed: `rt3` feeds D-014's primary side model;
 `target3` feeds the meta-model. See L-006 and D-014 for the full theoretical
 connection.
 
+### `LabelResult` schema (D-029)
+
+`LabelResult` is a single Polars `DataFrame` aligned to the 15m decision clock —
+one row per 15m bar in `df15`, never reindexed or filtered. Downstream consumers
+join on `open_time`. Columns:
+
+| column                | dtype                          | meaning                                              |
+|-----------------------|--------------------------------|------------------------------------------------------|
+| `open_time`           | `Datetime("us", tz="UTC")`     | 15m decision-clock timestamp (key)                   |
+| `rt3`                 | `Int8` (nullable)              | side label ∈ {−1, 0, +1}; `null` for tail rows       |
+| `target3`             | `Int8` (nullable)              | meta-label; equals `rt3` when `target2=False`        |
+| `first_touch_idx_1m`  | `Int64` (nullable)             | 1m bar index of first barrier touch (or `null`)      |
+| `entry_price`         | `Float64`                      | 15m close at decision time (D-027)                   |
+| `profit_level`        | `Float64`                      | `(1 + m_target × target_patr) × entry_price`         |
+| `stop_level`          | `Float64`                      | `(1 − m_stop × stop_patr) × entry_price`             |
+| `stop2_level`         | `Float64`                      | `(1 − (m_stop + slack) × stop_patr) × entry_price`   |
+| `ambig_15m`           | `Boolean`                      | both barriers in the same 15m bar at first touch     |
+| `ambig_1m`            | `Boolean`                      | both barriers in the same 1m bar (residual, honest)  |
+| `is_complete`         | `Boolean`                      | `False` for tail rows; `True` otherwise              |
+
+Scalar diagnostics (per-arm ambiguity rates, no-touch fraction, etc.) are
+returned in `LabelResult.attrs` (a dict stored alongside the DataFrame by the
+labeler), not as columns. The DataFrame is the primary artifact; the dict is
+read by B.2's `target_stats` helper.
+
+**Tail-row policy (D-029).** Rows whose `t + horizon_bars` exceeds the end of
+`df1m` carry `rt3 = null`, `target3 = null`, `first_touch_idx_1m = null`, and
+`is_complete = False`. They remain in the frame so the index stays aligned to
+the 15m clock; consumers filter on `is_complete` (or drop nulls in `rt3`) at
+the boundary.
+
+### Entry-price convention (D-027)
+
+The barriers at decision time `t` are anchored on the **close of the 15m bar
+at `t`**, reproducing v1 exactly:
+
+```text
+entry_price  = df15["close"][t]
+profit_level = (1 + m_target × df15[target_patr_col][t]) × entry_price
+stop_level   = (1 − m_stop   × df15[stop_patr_col][t])   × entry_price
+stop2_level  = (1 − (m_stop + stop2_slack) × df15[stop_patr_col][t]) × entry_price
+```
+
+The forward walk scans `df1m` strictly **after** the 15m close timestamp at `t`,
+so no 1m bar that falls inside the entry 15m bar contributes to the label.
+
+### 1m intra-bar tie-break (D-028)
+
+When a single 1m bar's high–low range contains *both* barriers, the order of
+first touch inside that 1m bar is unidentified from OHLC alone (D-006 added
+detail). The honest arm resolves it deterministically using the bar's net
+direction:
+
+- If `close > open`: assume the **high was touched first** → if that 1m bar
+  hits the profit barrier, label `+1`; if it hits the stop, label `−1`.
+- If `close ≤ open`: assume the **low was touched first** → if that 1m bar hits
+  the stop, label `−1`; if it hits the profit barrier, label `+1`.
+
+This rule mirrors the price path the close-vs-open relation already implies
+without re-using the `up_first` flag (which is computed from a *different*
+1m-window aggregation for pATR and would couple the labeler to a feature signal
+it should be independent of). Bars flagged `ambig_1m = True` are exactly the
+bars where this tie-break is invoked; the rate is logged in B.2.
+
+### Forward-walk vectorization (D-033)
+
+Naive iteration is ~2.3B 1m lookups (306K decisions × ~7.7K bars each) and
+unacceptably slow. The honest-arm resolution is implemented in Polars without a
+Python loop over decision points:
+
+1. Build a per-decision boolean mask on `df1m`:
+   `hit_target = df1m["high"] >= profit_level_for_decision_t` (broadcast).
+   This is built as a join-on-window, not a Cartesian product — see step 3.
+2. Same for `hit_stop = df1m["low"] <= stop_level_for_decision_t` and
+   `hit_stop2 = df1m["low"] <= stop2_level_for_decision_t`.
+3. Use a Polars window-join (`join_asof` with `by="decision_t"` and a range
+   filter `1m.open_time ∈ (15m.close_time[t], 15m.close_time[t] + horizon)`) to
+   find the **first** 1m bar in each decision's horizon where any hit fires.
+   The arg-min over 1m index is a `groupby(decision_t).first()` after sorting.
+4. Apply the D-028 tie-break only on rows flagged `ambig_1m`.
+
+The whole pipeline stays lazy until the final `.collect()` at the boundary,
+per the Polars convention in CLAUDE.md.
+
 ### Leakage discipline
 
 - The label at decision time `t` uses only bars **after** `t` for the forward
@@ -95,21 +292,36 @@ connection.
   pATR. No bar that produced the label may also appear inside the feature window
   for the same sample (Phase D enforces the feature side; B.1 enforces the label
   side).
-- Tail rows with an incomplete horizon window are labeled with a sentinel and
-  dropped — never partially labeled, never forward-filled. (v1's `fillna(33)` on
-  the tail did exactly this; keep the behavior, drop the magic number in favor of
-  a typed null.)
+- Tail rows with an incomplete horizon window are sentineled per D-029 — typed
+  `null` in `rt3` / `target3`, `is_complete = False`, row retained for index
+  alignment. Consumers filter on `is_complete` at the boundary; never
+  partially labeled, never forward-filled. (v1's `fillna(33)` collapsed
+  unlabeled rows into the negative class; the typed-null replacement preserves
+  the unobservability rather than fabricating it.)
 
 ### B.1 Tests
+
+B.1 tests use a new fixture `synthetic_barrier_path` in `tests/conftest.py`
+that builds matched 1m / 15m OHLCV plus pATR columns from a `PathSpec`
+(e.g. "+2σ at bar 100, −3σ at bar 200, flat thereafter") so each test
+prescribes a controlled price path. The Phase-A `synthetic_ohlcv` fixture is
+unchanged — barrier-path tests are a separate concern.
 
 - A handcrafted 1m path that touches profit-then-stop labels `+1`; stop-then-
   profit labels `−1`; neither labels `0`.
 - A path where both barriers fall in one 15m bar but the 1m sub-path clearly
   hits the stop first → honest arm `−1`, v1-faithful arm `+1`. This test *is* the
   D-006 finding in miniature; assert the two arms disagree on exactly this case.
+- A path where both barriers fall in **one 1m bar** (residual ambiguity).
+  Construct two variants — `close > open` and `close < open` — and assert the
+  D-028 tie-break resolves each deterministically; assert `ambig_1m = True`.
 - Horizon boundary: a touch on the last in-window bar counts; a touch one bar
   past the horizon yields `0`.
-- Tail rows with an incomplete window are dropped, not mislabeled.
+- Entry-price convention (D-027): a synthetic 15m bar whose close differs from
+  its open by a known amount; assert `entry_price == close_15m_at_t` exactly and
+  that barriers are anchored on that value, not the open or `next_open`.
+- Tail rows with an incomplete window carry `is_complete = False`, `rt3 = null`,
+  and the row remains in the frame (D-029).
 
 ### B.1 Definition of done
 
@@ -120,8 +332,12 @@ connection.
 - A test asserts that when `stop2` is touched before the target,
   `target3 = 0` while `rt3` still records the raw direction — confirming
   the meta-label logic is correct independent of resolution arm
-- Same-bar ambiguity rate is computed and logged for both arms
-- D-002, D-003, D-006, D-012, D-014, D-026 entries written to DECISIONS.md
+- Same-bar ambiguity rate is computed and logged at both 15m and 1m grain
+- `LabelResult` schema (D-029) is honored; tail rows sentineled but retained
+- Entry-price convention (D-027) and 1m intra-bar tie-break (D-028) are
+  implemented and exercised by tests
+- D-002, D-003, D-006, D-012, D-014, D-026, D-027, D-028, D-029, D-033 entries
+  reflected in DECISIONS.md (D-033 governs the Polars forward-walk strategy)
 
 ---
 
@@ -162,13 +378,26 @@ This is the heart of the phase. Three things v1 got wrong or skipped — geometr
 embargo, and uniqueness — are fixed here, with the v1 configuration retained for
 measurement.
 
-### Walk-forward geometry (D-010)
+### Walk-forward geometry (D-010, concretized)
 
-- **Primary (honest) arm:** multi-fold walk-forward. Expanding, anchored window
+- **Primary (honest) arm:** multi-fold walk-forward, expanding and anchored
   (train always starts at the beginning of the common span); each successive
-  fold extends train and slides val/test forward. Fold count chosen so each test
-  fold spans a *meaningful* market period (months, not weeks) and so at least one
-  test fold lands in each major regime where data allows.
+  fold extends train and slides val/test forward.
+- **Concrete sizing (D-010 added detail):**
+
+  | param                | value                          | rationale                                            |
+  |----------------------|--------------------------------|------------------------------------------------------|
+  | `n_folds`            | **8**                          | enough folds for D-008's K-of-N to be meaningful; not so many a deep model can't be retrained per fold |
+  | initial-train anchor | **~2 years** (~70,000 bars)    | regime diversity before fold 1                       |
+  | `test_fold_bars`     | **~8,640** (≈ 1 quarter)       | "months, not weeks"; one calendar quarter per fold   |
+  | `val_fold_bars`      | **~4,032** (≈ 6 weeks)         | threshold tuning + early stopping                    |
+  | `slide_step_bars`    | **= `test_fold_bars`**         | non-overlapping test folds                           |
+  | `embargo_bars`       | **511** each side              | D-004 default                                        |
+
+  Total span consumed ≈ 2y anchor + 8 × (val + test) + embargos ≈ 6 years;
+  ~2.75 y headroom rolls into the expanding-train tail. Each major regime
+  (2017/2021 bull, 2018/2022 bear, 2023–25 recovery, 2025 pullback) lands in
+  at least one test fold.
 - **Comparison (v1-faithful) arm:** the single 75 / 15 / 10 chronological split
   (`training_portion=0.75`, the 15% early-stopping "test", the 10% held-out
   "val"), reproduced exactly. Run once, to report "v1's split gave X; the walk-
@@ -194,7 +423,7 @@ so this leak was unguarded.
   no-embargo condition) to measure how much the unguarded leak was worth. Record
   the delta in LEARNINGS.md, then retire the zero-embargo config.
 
-### Sample weights (D-005)
+### Sample weights (D-005, D-017)
 
 Overlapping labels break the i.i.d. assumption twice over — in training and in
 the width of any confidence interval.
@@ -203,13 +432,27 @@ the width of any confidence interval.
   `w1 = fraction_positive` (essential at ~9.3% positive).
 - **Average-uniqueness weights:** layer LdP ch. 4 average-uniqueness on top.
   Final per-sample weight = `class_weight × uniqueness_weight`.
-- **Effective sample size:** compute `N_eff` from the uniqueness weights and use
-  it — not the raw row count — when forming confidence intervals on test metrics
-  in Phase C. A headline precision reported without an `N_eff`-based interval is
-  not finished.
+  - Concurrency: `c_t = Σ_i 1[t_{i,0} ≤ t ≤ t_{i,1}]`.
+  - Average uniqueness: `ū_i = (1/|window_i|) · Σ_{t∈window_i} (1/c_t)` —
+    `|window_i|` is the **bar count** of sample `i`'s label window, not a
+    concurrency value. Sanity property: `ū_i = 1` when all `c_t = 1`.
+  - **Scope:** concurrency and uniqueness are computed on **training-fold
+    labels only** (label windows confined to the fold). Computing across the
+    full series leaks test-period overlap structure into training weights.
+- **No time decay (D-017).** The piecewise-linear time-decay factor on
+  cumulative uniqueness (LdP ch. 4) is disabled (`c = 1`). Walk-forward
+  retraining already adapts to regime drift; further decay would shrink an
+  already-small `N_eff` for marginal gain.
+- **Renormalization.** After `class × uniqueness`, renormalize per-fold so
+  the weight sum equals `N` (the training-fold row count). This keeps the
+  effective learning rate independent of fold size and is asserted in a test.
+- **Effective sample size (Kish):** `N_eff = (Σ w_i)² / Σ w_i²`, used as the
+  denominator in every interval (`SE ≈ σ/√N_eff`). Expect `N_eff` one-to-two
+  orders of magnitude below the raw row count given the 511-bar overlap. A
+  headline precision reported without an `N_eff`-based interval is not finished.
 
 ```python
-# splits.py — the single source of truth for fold membership
+# src/assareh/splits/splits.py — the single source of truth for fold membership
 @dataclass(frozen=True)
 class Fold:
     fold_id: int
@@ -219,18 +462,33 @@ class Fold:
     embargo_bars: int
 
 def make_walkforward_folds(
-    index: pl.Series,          # 15m decision-clock open_times
+    index: pl.Series,                # 15m decision-clock open_times
+    *,
     horizon_bars: int = 511,
-    n_folds: int = ...,        # chosen per the geometry rule above
+    n_folds: int = 8,                # D-010 added detail
+    anchor_train_bars: int = 70_000, # ~2 years of 15m
+    test_fold_bars: int = 8_640,     # ~1 calendar quarter
+    val_fold_bars: int = 4_032,      # ~6 weeks
     embargo_bars: int = 511,
-    scheme: Literal["walkforward", "v1_single"] = "walkforward",
+    scheme: Literal["walkforward", "v1_single", "cpcv"] = "walkforward",
 ) -> list[Fold]:
     """Single source of truth for what is train/val/test in every fold.
-    scheme='v1_single' returns the one 75/15/10 chronological split.
+
+    - 'walkforward' (default, D-010): expanding-anchored multi-fold, sizes above.
+    - 'v1_single':  one 75/15/10 chronological split, reproduced exactly.
+    - 'cpcv' (D-016, compute-gated): combinatorial purged CV; implementation
+      lands in Phase C, but the scheme value is reserved in the B.3 API so
+      Phase C consumers don't reshape it.
     """
 
-def average_uniqueness(label_spans: list[tuple[int, int]]) -> np.ndarray:
-    """LdP ch.4 average uniqueness per sample, from label outcome spans."""
+# src/assareh/splits/weights.py
+def average_uniqueness(label_spans: np.ndarray) -> np.ndarray:
+    """LdP ch.4 average uniqueness per sample.
+
+    label_spans: shape (n, 2), int64 — columns are (start_idx, end_idx_exclusive)
+    into the 15m decision clock. Contiguous-memory ndarray chosen (D-032) for
+    vectorized concurrency / uniqueness computation across the numpy boundary.
+    """
 ```
 
 ### B.3 Tests
@@ -250,9 +508,16 @@ def average_uniqueness(label_spans: list[tuple[int, int]]) -> np.ndarray:
 - `splits.py` is the *only* place fold membership is defined; nothing downstream
   recomputes it
 - Purge + embargo tested and correct; default embargo = horizon
-- Uniqueness weights and `N_eff` computed and available to Phase C
-- Both `walkforward` and `v1_single` schemes produced from one function
-- D-004, D-005, D-010 entries written to DECISIONS.md
+- Uniqueness weights and `N_eff` (Kish) computed on **training-fold labels
+  only**, with `weight = class × uniqueness` renormalized per fold to sum
+  to `N` (asserted in a test); no time decay (D-017)
+- `walkforward` and `v1_single` schemes produced from one function; the
+  `cpcv` scheme value is reserved in the signature for Phase C (D-016)
+- Concrete fold geometry (n_folds=8, anchor≈2y, test≈1Q, val≈6w) wired into
+  defaults; the trial set (folds × dual arms × baselines) is the V source
+  for D-008
+- D-004, D-005, D-010, D-017, D-032 reflected in DECISIONS.md; D-016 status
+  updated to reflect the reserved scheme value
 
 ---
 
@@ -263,24 +528,46 @@ def average_uniqueness(label_spans: list[tuple[int, int]]) -> np.ndarray:
 v1 had no success condition, so "success" was whatever the numbers happened to
 be. Fix that here, before any model exists, so Phase E cannot retrofit the bar.
 
-Write into DECISIONS.md (D-008) a concrete, falsifiable condition, e.g.:
+Concrete pre-registered condition (D-008 added detail, this phase):
 
 > The hypothesis is confirmed if the honest arm achieves **out-of-sample,
-> net-of-cost precision-at-threshold above the 38.5% breakeven** with an
-> `N_eff`-based confidence interval excluding 38.5%, on **at least K of the N
-> walk-forward test folds**, and a **Deflated Sharpe Ratio > 0** on the
-> aggregated out-of-sample equity curve.
+> net-of-cost precision-at-threshold above the cost-adjusted breakeven**
+> (D-007 added detail; not the bare 38.5%, which is pre-cost) with an
+> `N_eff`-based confidence interval excluding that bar, on **at least 5 of
+> the 8 walk-forward test folds**, with **Deflated Sharpe Ratio > 0.95**
+> on the aggregated out-of-sample equity curve and **PBO < 0.2**.
 
-Pick the actual K, N, and any Sharpe floor now and commit them. The point is not
-the exact values — it's that they are fixed before you can see the model's
-output.
+Pinned values, before any model is fit:
+
+| parameter         | value                       | source              |
+|-------------------|-----------------------------|---------------------|
+| `N` (total folds) | **8**                       | D-010 added detail  |
+| `K` (pass folds)  | **5** (60% pass rate)       | this phase          |
+| DSR confidence    | **0.95**                    | default             |
+| PBO ceiling       | **0.2**                     | default             |
+| `V` source        | **trial-set estimator**: variance of Sharpe across `folds × dual arms × baselines`, all logged to MLflow | D-008 added detail (option b) |
+
+The `V` source is the trial-set estimator (not reduced CPCV), because
+pre-registration must complete at the end of Phase B and the CPCV path
+requires Phase-E model output. CPCV remains available in Phase C as a
+secondary `V` source if the trial-set estimator turns out to be too narrow.
+
+The point of pre-registration is that these are fixed before any model
+output exists. They are now fixed.
 
 ### Checkpoint
 
-- DECISIONS.md updated with D-002 … D-012 (those not already written in B.1–B.3)
-- LEARNINGS.md updated with the target diagnostics, the same-bar ambiguity rate,
-  and the embargo leakage-probe delta if run
-- `splits.py`, `targets.py`, and their tests committed and green
+- DECISIONS.md updated with D-002 … D-033 (those not already written in B.0–B.3),
+  including the new entries for entry price (D-027), intra-bar tie-break (D-028),
+  `LabelResult` schema (D-029), module layout (D-030), pATR module location
+  (D-031), and forward-walk vectorization (D-033); status updates on D-008
+  (pinned values), D-010 (concrete sizing), D-015 (out of scope for Layer 1),
+  and D-016 (scheme value reserved)
+- LEARNINGS.md updated with the target diagnostics, the same-bar ambiguity rate
+  at both grains, the Q4 `shift(3)` verdict from B.0, and the embargo
+  leakage-probe delta if run
+- `attach_patr`, `make_labels`, `make_walkforward_folds`, `average_uniqueness`
+  and their tests committed and green
 - Commit `B: phase complete`
 - Self-review against the gate: **C must be able to consume `splits.py` and the
   label arms without knowing anything about a model.** If the harness in Phase C
@@ -295,6 +582,12 @@ output.
 - No scalers fit (Phase D, per-fold only)
 - No model, no training, no thresholds tuned against test (Phase C/E)
 - No feature selection (Phase D)
+- **No CUSUM event filter (D-015).** Out of scope for Layer 1; honest-arm
+  cadence stays at every 15m close (D-002). Revisit in Layer 2 if the
+  base-rate / overlap diagnostics in B.2 motivate it.
+- **No CPCV implementation in Phase B (D-016).** The `cpcv` scheme value is
+  reserved in `make_walkforward_folds` so Phase C consumers don't reshape the
+  API, but the implementation lands in Phase C.
 
 If you find yourself wanting any of these to "see if the target works," stop:
 that impulse is exactly what the phase ordering exists to prevent.
