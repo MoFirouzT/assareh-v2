@@ -59,17 +59,48 @@ evaluation-harness skeleton *before* writing any model.
 
 **Key deliverables:**
 
-- Triple-barrier target function (pATR-based, three-class `-1/0/+1`, 511-bar
-  horizon, matching v1 semantics) with tests — **1m-resolved barrier ordering
-  primary**, 15m-optimistic ordering retained as the v1-faithful comparison arm
-- Documented target statistics:
-positive rate, **timeout (no-touch) rate**, distribution over time, regime shifts; the **38.5% breakeven reference** written down explicitly
-- Walk-forward CV scheme implemented and tested, with **purging + embargo (embargo ≥ 511 bars, the full label horizon)**;
-the v1 single 75/15/10 chronological split retained as a comparison configuration
-- **Sample-uniqueness weighting** (López de Prado average uniqueness) layered on top of v1's class-imbalance weights, plus an **effective-N adjustment** for confidence intervals on test metrics
-- A `splits.py` module that's the single source of truth for what's train, val, and test for every fold
-- A **pre-registered success threshold** committed before any model is trained
-- Decision-log entries explaining target, no-touch handling, horizon, embargo, uniqueness, fold count, and the pre-registered bar
+- **Multi-timeframe pATR module** (`features/patr.py`) producing `patr_15`,
+  `patr_60`, `patr_240` on the 15m clock — prerequisite for B.1
+  (D-012, D-026, D-031)
+- Triple-barrier target function with tests — **1m-resolved barrier ordering
+  primary** (honest arm), 15m-optimistic ordering retained as the v1-faithful
+  comparison arm (D-006). Barriers anchored on the 15m close (D-027); 1m
+  intra-bar tie-break by `close > open` direction (D-028); MTF pATR split
+  (longer-horizon pATR for target, shorter for stop, D-026)
+- **Meta-labeling outputs:** `make_labels` returns both `rt3` (side / primary
+  label) and `target3` (meta-label via `stop2` slack), matching v1's
+  `TargetExtractor3` and feeding D-014's two-stage model
+- `LabelResult` as a single Polars DataFrame on the 15m decision clock with
+  typed-null tail sentinels (D-029); per-arm same-bar ambiguity rates logged
+  at both 15m and 1m grain
+- Documented target statistics: positive rate, **timeout (no-touch) rate**,
+  distribution over time, regime shifts; the **38.5% breakeven reference**
+  written down explicitly (D-007), with the cost-adjusted variant computed
+  once D-011's cost model is fixed in Phase C
+- Walk-forward CV scheme implemented and tested, with **purging + embargo
+  (embargo ≥ 511 bars, the full label horizon)** (D-004), concretely sized
+  to **8 folds, ~2y initial anchor, ~1 quarter test per fold, ~6w val per
+  fold** (D-010 added detail); the v1 single 75/15/10 chronological split
+  retained as a comparison configuration; `cpcv` scheme value reserved in
+  the splits API for Phase C (D-016)
+- **Sample-uniqueness weighting** (López de Prado average uniqueness,
+  computed on training-fold labels only) layered on top of v1's
+  class-imbalance weights, renormalized per fold to sum to `N`; **Kish-N_eff**
+  for confidence intervals on test metrics; no time decay (D-005, D-017)
+- A `splits.py` module that's the single source of truth for what's train,
+  val, and test for every fold
+- A **pre-registered success threshold** committed before any model is
+  trained — net-of-cost precision above the cost-adjusted breakeven with an
+  `N_eff`-based CI excluding it, on **at least 5 of 8** test folds, with
+  **DSR > 0.95** and **PBO < 0.2**; `V` source = trial-set estimator over
+  `folds × dual arms × baselines` (D-008 added detail)
+- Decision-log entries D-027 … D-033 reflecting the new B-phase choices
+  (entry-price convention, intra-bar tie-break, `LabelResult` schema, module
+  layout, pATR module location, `label_spans` representation, forward-walk
+  vectorization)
+
+**Out of scope for Layer 1:** CUSUM event filter (D-015 — Rejected; revisit
+in Layer 2). CPCV implementation lands in Phase C (D-016).
 
 **Learning component:** ~8 hours reading López de Prado **chapters 3 (labeling), 4 (sample weights / uniqueness), and 7 (cross-validation in finance)** before implementing, plus a skim of **chapters 11–12 (backtest overfitting, CSCV/PBO, Deflated Sharpe Ratio)** to inform the success threshold and reporting.
 This is the most important learning investment in Layer 1.

@@ -469,12 +469,39 @@ Required tests:
 
 ---
 
-## A.4 — Phase A checkpoint
+## A.4 — Phase A checkpoint (closed 2026-05-27)
 
-- Update DECISIONS.md with all tooling and library choices made
-- Update LEARNINGS.md with anything surprising from A.2 / A.3 (real-data gaps,
-  zero-volume counts, any cross-timeframe coverage mismatch)
-- Self-review: does the repo look like something a senior engineer would recognize as well-organized?
-  Iterate once if not.
+Phase A is complete. The deliverables called out in PLAN.md and this file are
+met; the entries below tick them off explicitly.
+
+**Definition of done — verified:**
+
+- [x] Repo skeleton matches the tree above (`src/assareh/`, `scripts/`, `tests/`,
+  `data/`, `docs/`)
+- [x] `uv sync` produces a working env on M-series ARM
+- [x] `uv run pytest` is green (19/19 passing as of 2026-05-27)
+- [x] `uv run ruff check .` and `uv run mypy src/` pass
+- [x] Four Parquet files on disk: `data/raw/btcusdt_{1m,15m,1h,4h}.parquet`,
+  each conforming to `OHLCV_SCHEMA`
+- [x] `data/raw/checksums.jsonl` records the SHA-256 of every verified Binance
+  archive (per D-019 — soft on missing CHECKSUMs)
+- [x] `from assareh.data import load_ohlcv` works; `check_integrity` and
+  `check_cross_timeframe_alignment` return typed reports
+- [x] All four real timeframes pass `check_integrity`; cross-timeframe
+  alignment hard-failures on the known Binance pre-2018 timestamp anomaly are
+  documented in L-001 and bounded by the test
+- [x] DECISIONS.md updated with D-018 … D-025, D-034, D-035 (the tooling stack
+  is now a numbered entry, D-035; the loader-cast-vs-assert decision is D-034)
+- [x] LEARNINGS.md captures L-001 (Binance timestamp offsets), L-002 (integrity
+  statistics baseline), L-003 (ancillary-column unreliability), L-004 (loader
+  schema-cast rationale), L-005 (missing CHECKSUM files)
+- [x] Self-review pass: repo layout and code organization reviewed; no
+  follow-up structural changes required before Phase B
+
+**Out of scope, deferred to later phases:**
+
+- pATR computation — moved to Phase B (B.0) per D-031; `attach_patr` lives at
+  `src/assareh/features/patr.py`
+- CI workflow — Phase A spec deferred this; revisit when Phase B code lands
 
 ---

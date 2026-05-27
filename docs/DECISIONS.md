@@ -2,36 +2,49 @@
 
 This file is the append-only log of design decisions.
 
-## Tooling choices
+**Status taxonomy:** `Accepted` · `Proposed` · `Rejected` · `Superseded`.
+Qualifiers (e.g. "compute-gated", "governing", "Layer 1 only") live in the
+first line of the decision body, not in the status field.
 
-- Package manager: `uv` (fast, modern, lockfile-backed, has native ARM support)
-- Python: 3.12 (latest well-supported for ARM)
-- Dataframes:
-  - `polars` for I/O and preprocessing (better element, learning objective)
-  - `pandas` for sklearn/torch
-- Config: `pydantic-settings` (typed, env-aware settings and easier to override)
-- Experiment tracking: `mlflow` with local file backend for Layer 1
-- Testing: `pytest` with `tests/` discovery
-- Linting: `ruff` (fast formatter/linter)
-- Type checking: `mypy` (gradual; `ignore_missing_imports = true` initially)
-- Logging: stdlib `logging` (no structlog)
+## Index
 
-## Loading Data
-
-### Negative volume is a hard integrity failure
-
-Negative volume is physically impossible.
-It indicates source corruption or a parse error — not a data quirk like a zero-volume bar (which is real at low-activity periods).
-
----
-
-### Loader casts to OHLCV_SCHEMA rather than asserting exact match
-
-The downloader writes Parquet via pandas, which may round-trip timestamps at
-a different precision (ms vs us).
-A strict schema comparison would reject valid data that differs only in precision.
-The loader now reads the Parquet, checks for missing columns (hard error), then casts every column to the canonical OHLCV_SCHEMA type.
-This guarantees the output schema is always correct without rejecting recoverable mismatches.
+| ID    | Title                                                                 | Phase | Status   |
+|-------|-----------------------------------------------------------------------|-------|----------|
+| D-001 | Dual-arm methodology (governing rule)                                 | B→F   | Accepted |
+| D-002 | Decision cadence: 15m bar close                                       | B     | Accepted |
+| D-003 | Vertical barrier: horizon length and no-touch handling                | B     | Accepted |
+| D-004 | Embargo and purging                                                   | B     | Accepted |
+| D-005 | Sample-uniqueness weighting                                           | B     | Accepted |
+| D-006 | Barrier-touch resolution source                                       | B     | Accepted |
+| D-007 | Breakeven reference (38.5%, not 50%)                                  | B     | Accepted |
+| D-008 | Success-threshold pre-registration                                    | B     | Accepted |
+| D-009 | Loss function                                                         | E     | Accepted |
+| D-010 | Walk-forward geometry                                                 | B     | Accepted |
+| D-011 | Cost model                                                            | C     | Accepted |
+| D-012 | pATR definition lock                                                  | B     | Accepted |
+| D-013 | Feature-selection scope                                               | D     | Accepted |
+| D-014 | Meta-labeling (side / size decomposition)                             | E     | Proposed |
+| D-015 | Labeling event filter (sampling cadence)                              | B     | Rejected |
+| D-016 | Backtest geometry: walk-forward vs. CPCV                              | C     | Proposed |
+| D-017 | Time-decay on sample weights                                          | B     | Accepted |
+| D-018 | Grid containment check: modulo vs. presence-based anti-join           | A     | Accepted |
+| D-019 | CHECKSUM verification: soft on missing files                          | A     | Accepted |
+| D-020 | ccxt tail bars: zero-fill missing ancillary columns                   | A     | Accepted |
+| D-021 | OHLCV schema: 9 columns                                               | A     | Accepted |
+| D-022 | Integrity check severity taxonomy                                     | A     | Accepted |
+| D-023 | Price sanity bounds: close ∈ [100, 1 000 000] for BTC/USDT            | A     | Accepted |
+| D-024 | Gap handling: soft observation, never forward-fill                    | A     | Accepted |
+| D-025 | Cross-timeframe alignment check severity                              | A     | Accepted |
+| D-026 | Multi-timeframe pATR: longer-horizon for target, shorter for stop     | B     | Accepted |
+| D-027 | Entry-price convention: close of the 15m bar at `t`                   | B     | Accepted |
+| D-028 | 1m intra-bar tie-break (honest arm)                                   | B     | Accepted |
+| D-029 | `LabelResult` schema and tail-sentinel dtype                          | B     | Accepted |
+| D-030 | Phase-B module layout                                                 | B     | Accepted |
+| D-031 | pATR module location                                                  | B     | Accepted |
+| D-032 | `label_spans` representation                                          | B     | Accepted |
+| D-033 | Forward-walk vectorization strategy                                   | B     | Accepted |
+| D-034 | Loader casts to canonical schema rather than asserting exact match    | A     | Accepted |
+| D-035 | Layer-1 tooling stack                                                 | A     | Accepted |
 
 ---
 
@@ -384,7 +397,9 @@ This guarantees the output schema is always correct without rejecting recoverabl
 ## D-014 — Meta-labeling (side / size decomposition)
 
 - **Date:** 2026-05-25 — **Phase:** E (decided in B) — **Status:** Proposed
-  (ratify Layer-1 vs Layer-2 placement before Phase E)
+- **Open question to resolve before Phase E begins:** ratify Layer-1 vs
+  Layer-2 placement. If deferred to Layer 2, fall back to D-009's single-stage
+  arms.
 - **Decision.** Model the target as **side then size**. The primary model
   (`ConvWideDeepLSTMNet`) predicts direction; a separate **binary meta-model**,
   trained only on bars where the primary takes a position (`ŝ_t ≠ 0`), predicts
@@ -429,8 +444,9 @@ This guarantees the output schema is always correct without rejecting recoverabl
 
 ## D-015 — Labeling event filter (sampling cadence)
 
-- **Date:** 2026-05-25 — **Phase:** B — **Status:** Rejected for Layer 1
-  (revisit in Layer 2)
+- **Date:** 2026-05-25 — **Phase:** B — **Status:** Rejected
+- **Scope of rejection:** Layer 1 only; revisit in Layer 2 if the B.2
+  diagnostics motivate it.
 - **Decision.** Honest arm samples decision points with a **symmetric CUSUM
   filter** on de-meaned 15m returns: `S⁺_t = max(0, S⁺_{t-1} + r_t − E[r_t])`,
   `S⁻_t = min(0, S⁻_{t-1} + r_t − E[r_t])`, emit a labeling event (and reset)
@@ -461,7 +477,8 @@ This guarantees the output schema is always correct without rejecting recoverabl
 ## D-016 — Backtest geometry: walk-forward vs. CPCV
 
 - **Date:** 2026-05-25 — **Phase:** C (decided in B) — **Status:** Proposed
-  (compute-gated)
+- **Qualifier:** compute-gated. Scheme value reserved in Phase B; impl in
+  Phase C (see added detail 2026-05-27).
 - **Decision.** Primary backtester = single-path purged + embargoed
   **walk-forward** (D-010). Run **Combinatorial Purged CV (CPCV)** in a *reduced*
   configuration — on the four baselines and a reduced-epoch model — to obtain the
@@ -490,7 +507,8 @@ This guarantees the output schema is always correct without rejecting recoverabl
 
 ## D-017 — Time-decay on sample weights
 
-- **Date:** 2026-05-25 — **Phase:** B — **Status:** Accepted (resolved to "off")
+- **Date:** 2026-05-25 — **Phase:** B — **Status:** Accepted
+- **Verdict in one line:** resolved to "off" — no time-decay layer in Layer 1.
 - **Decision.** **No time decay** in Layer 1. Final weight = `class × uniqueness`
   (D-005) with de Prado's piecewise-linear decay on cumulative uniqueness disabled
   (`c = 1`).
@@ -693,7 +711,8 @@ This guarantees the output schema is always correct without rejecting recoverabl
 ## D-026 — Multi-timeframe pATR: longer-horizon ATR for target, shorter for stop
 
 - **Date:** 2026-05-27 — **Phase:** B (applies to TargetExtractors 2–4 in v1;
-  governs Phase B barrier construction in v2) — **Status:** Accepted (adopt v1)
+  governs Phase B barrier construction in v2) — **Status:** Accepted
+- **Verdict in one line:** adopt v1 (no methodological change).
 - **Decision.** When multiple pATR timeframes are available (15m / 60m / 240m,
   or 5m / 15m / 60m / 240m), use a **longer-horizon pATR for the profit target**
   and a **shorter-horizon pATR for the stop**. For example, TargetExtractor3
@@ -896,3 +915,52 @@ This guarantees the output schema is always correct without rejecting recoverabl
   - Naive Python loop — rejected (too slow on the real dataset).
   - Pandas + `numpy` broadcasting — would work but contradicts the
     CLAUDE.md Polars convention; rejected.
+
+## D-034 — Loader casts to canonical schema rather than asserting exact match
+
+- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Decision.** `load_ohlcv` reads the raw Parquet, hard-fails if any
+  canonical column is missing, then **casts every column to `OHLCV_SCHEMA`
+  types** rather than asserting an exact schema match.
+- **v1 behavior.** v1 had no Polars loader; the question did not arise.
+- **Verdict.** New.
+- **Rationale.** The Phase-A downloader writes Parquet via pandas, which
+  round-trips `Datetime` timestamps at millisecond precision (`ms`) while the
+  canonical schema specifies microsecond precision (`us`). A strict
+  schema-equality check would reject valid data that differs only in
+  precision. The cast is a one-time cost at load time and guarantees that
+  downstream code always sees the canonical schema regardless of how the
+  Parquet was written (see L-004).
+- **Recorded alternative.** Strict equality assertion — rejected; it would
+  fail valid data on the pandas `ms`-vs-`us` round-trip.
+- **Note.** This entry promotes the previously un-numbered "Loader casts to
+  OHLCV_SCHEMA" preamble block into a proper numbered decision.
+
+## D-035 — Layer-1 tooling stack
+
+- **Date:** 2026-05-21 — **Phase:** A — **Status:** Accepted
+- **Decision.** The Layer-1 tooling stack is fixed at the start of Phase A:
+  - **Package manager:** `uv` (fast, lockfile-backed, native ARM)
+  - **Python:** 3.12 (latest broadly supported on ARM)
+  - **DataFrames:** `polars` for I/O and preprocessing; `pandas` only at the
+    sklearn / torch / pandas-ta boundary
+  - **Config:** `pydantic-settings` (typed, env-aware)
+  - **Experiment tracking:** `mlflow` with local file backend (no server)
+  - **Testing:** `pytest` with `tests/` discovery
+  - **Linting:** `ruff` (formatter + linter in one)
+  - **Type checking:** `mypy` (gradual, `ignore_missing_imports = true`)
+  - **Logging:** stdlib `logging` (no `structlog`)
+- **v1 behavior.** v1 used Django + Celery + a relational DB for the live
+  service and pandas + TA-Lib in research — a different stack entirely. This
+  decision is about the v2 research codebase only.
+- **Verdict.** New (consolidates the un-numbered "Tooling choices" preamble
+  from earlier commits into a single numbered decision).
+- **Rationale.** The combination is M-series-friendly (`uv` and native-ARM
+  packages), keeps Layer-1 setup to a single command (`uv sync`), and avoids
+  ops complexity (file-backed MLflow, no server). Polars is the explicit
+  learning objective for I/O; pandas survives only at boundaries that
+  require it.
+- **Recorded alternative.** `pip` + `requirements.txt` with pandas everywhere
+  — rejected: slower setup, no native lockfile, misses the Polars learning
+  goal. A managed MLflow server would add ops surface without Layer-1
+  benefit; rejected for now.
