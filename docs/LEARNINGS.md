@@ -50,12 +50,12 @@ to these ~2 months without explicit handling.
 All four timeframes pass `check_integrity` (no hard failures). Soft
 observations worth knowing before Phase B/D:
 
-| Timeframe | Rows | Date range | Gaps | Largest gap | Zero-vol | OHLC-equal |
-|-----------|-----:|------------|-----:|-------------|----------:|----------:|
-| 1m  | 4,598,701 | 2017-08-17 → 2026-05-21 | 34 | 2,010 bars (~33.5 h) | 24,003 | 56,731 |
-| 15m |   306,588 | 2017-08-17 → 2026-05-21 | 32 | 134 bars (~33.5 h)   |     60 |    147 |
-| 1h  |    76,660 | 2017-08-17 → 2026-05-21 | 28 | 32 bars (~32 h)      |      4 |      4 |
-| 4h  |    19,179 | 2017-08-17 → 2026-05-21 |  9 | 7 bars (~28 h)       |      0 |      0 |
+| Timeframe |       Rows | Date range                      | Gaps | Largest gap              | Zero-vol | OHLC-equal |
+|:----------|-----------:|:--------------------------------|:-----|:-------------------------|---------:|-----------:|
+| 1m        |  4,598,701 | 2017-08-17 → 2026-05-21         |   34 | 2,010 bars (~33.5 h)     |   24,003 |     56,731 |
+| 15m       |    306,588 | 2017-08-17 → 2026-05-21         |   32 | 134 bars (~33.5 h)       |       60 |        147 |
+| 1h        |     76,660 | 2017-08-17 → 2026-05-21         |   28 | 32 bars (~32 h)          |        4 |          4 |
+| 4h        |     19,179 | 2017-08-17 → 2026-05-21         |    9 | 7 bars (~28 h)           |        0 |          0 |
 
 **Gap pattern.** Most of the 34 1m gaps occur just after 02:00 UTC —
 consistent with Binance scheduled maintenance. The largest gap
@@ -130,3 +130,62 @@ URL. The downloader treats a missing checksum as a warning and proceeds
 rather than hard-failing, which makes historical back-fills practical. Any
 archive that *does* provide a checksum is verified and the hash is logged to
 `data/raw/checksums.jsonl`.
+
+---
+
+## L-006 — v1's `target2=True` is embedded meta-labeling
+
+**Discovered:** Phase B preparation — reverse-engineering the v1 TargetExtractor family
+
+Analysis of `TargetExtractor` through `TargetExtractor4` reveals that the
+`target2=True` branch is not a labeling quirk — it is a **rule-based
+meta-labeling step hard-coded inside the labeler**, producing two structurally
+distinct outputs:
+
+- **`rt3`** — raw first crossing, the *side label* (primary). Answers "which
+  direction did price move?" regardless of how cleanly the trade resolved.
+- **`target3`** — filtered label, the *meta-label*. Set to `rt3` when the
+  profit target is touched cleanly; set to `0` when `stop2` (the
+  slack-expanded stop) is touched first, flagging the trade as ambiguous.
+- **`stop2`** = `(1 − (m_stop + slack) × pATR) × price` is the
+  **ambiguity threshold**: if price gets closer to the stop than `stop2`
+  before reaching the target, the signal is downgraded to a non-event in
+  the meta-label.
+
+This maps precisely to López de Prado's **meta-labeling** framework
+(AFML Ch. 3.6): `rt3` is the primary model's label (side), and `target3`
+is the meta-label `m_t = 𝟙[primary's bet paid off under tighter risk control]`.
+v1 implemented the meta-labeling rule in the labeler itself; v2's D-014 makes
+this a learned two-stage model, but the label pair it needs (`rt3`, `target3`)
+is exactly what v1 already produced.
+
+**Implication for Phase B.** The v1-faithful arm in `make_labels` must
+reproduce **both** `rt3` and `target3`, plus `stop2`. The `stop2_slack`
+parameter must be configurable (default 1, matching v1). See PHASE_B.md B.1.
+
+---
+
+## L-007 — Multi-timeframe ATR term structure: why longer-vol for target, shorter-vol for stop
+
+**Discovered:** Phase B preparation — analyzing TargetExtractors 2–4
+
+The MTF pATR design (longer ATR for the profit target, shorter ATR for the
+stop) is an application of **volatility term structure** reasoning:
+
+- A **slow, long-horizon ATR** (e.g., 240-min pATR) is smooth and wide. It
+  scales the profit target to the medium-term volatility regime, so the target
+  only fires on moves that are large relative to normal baseline swings — not
+  transient spikes. This reduces false positives from noise.
+- A **fast, short-horizon ATR** (e.g., 60-min pATR) is reactive. It scales
+  the stop to recent (fast) volatility, so the stop tightens in volatile
+  regimes and widens in calm ones. This is consistent with cutting losses
+  quickly when the market is choppy and giving room when conditions are stable.
+
+Using a *single* pATR for both barriers creates a systematic mismatch: a
+slow ATR makes the stop too wide in high-volatility regimes (losses compound
+before the stop fires); a fast ATR makes the target too tight in low-volatility
+regimes (false wins on small bounces). The asymmetric MTF design avoids both
+failure modes and reduces the timeout (`0`) fraction compared to a
+single-timeframe configuration.
+
+This reasoning is captured as a design decision in **D-026**.

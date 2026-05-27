@@ -1,38 +1,18 @@
 # Phase B — Target definition and split design
 
-**Goal:** Define the prediction target rigorously, design walk-forward splits
+**Goal:**
+Define the prediction target rigorously, design splits
 that respect both the temporal structure and the label horizon, and lock the
 evaluation-harness skeleton — all *before* writing any model.
 
 This is the phase where most of v1's credibility problems live, and the phase
-where the dual-arm methodology (DECISIONS.md D-001) starts paying for itself.
-Nothing here fits a model. Everything here decides whether the eventual model's
-numbers will mean anything.
+where the dual-arm methodology starts paying for itself.
+Nothing here fits a model.
+Everything here decides whether the eventual model's numbers will mean anything.
 
-> **Hard prerequisite:** Phase A complete. Real OHLCV for all four timeframes on
-> disk, integrity-clean, cross-timeframe aligned. The 1m series in particular
-> must be trustworthy — it is the barrier-resolution substrate (B.1 / D-006).
-
----
-
-## B.0 — Reading (do this first)
-
-~8 hours, before writing code. This is the highest-leverage learning in Layer 1.
-
-- **López de Prado, ch. 3 — Labeling.** The triple-barrier method and meta-
-  labeling. This *is* our target. Read closely.
-- **ch. 4 — Sample weights.** Overlapping outcomes, average uniqueness,
-  sequential bootstrap. Directly informs B.3's uniqueness weighting.
-- **ch. 7 — Cross-validation in finance.** Purging and embargo. Directly
-  informs B.3's walk-forward scheme.
-- **Skim ch. 11–12 — Backtest overfitting.** CSCV, Probability of Backtest
-  Overfitting, Deflated Sharpe Ratio. Informs the success threshold (B.5) and
-  the Phase C metrics. You don't need to implement all of it, but the success
-  bar should be set with these failure modes in mind.
-
-Log one LEARNINGS.md entry capturing the two or three ideas that change how you
-were going to build the target or the splits. If nothing changed your plan, you
-either already knew it or didn't read closely enough.
+> **Hard prerequisite:**
+> Phase A complete. Real OHLCV for all four timeframes on disk, integrity-clean, cross-timeframe aligned.
+> The 1m series in particular must be trustworthy — it is the barrier-resolution substrate.
 
 ---
 
@@ -85,14 +65,28 @@ def make_labels(
     m_stop: float = 2.5,
     horizon_bars: int = 511,
     resolution: Literal["1m", "15m"] = "1m",   # "15m" == v1-faithful arm
+    target2: bool = True,          # produce meta-label (target3) alongside side (rt3)
+    stop2_slack: float = 1.0,      # stop2 = (1 − (m_stop + slack) × pATR) × price
 ) -> LabelResult:
     """Triple-barrier labels. resolution selects honest vs v1-faithful arm.
 
-    Returns labels in {-1, 0, +1}, the per-decision first-touch bar index,
-    and the same-bar ambiguity rate. Tail rows whose horizon window is
+    When target2=True, returns both:
+      - rt3  : raw first crossing in {-1, 0, +1}  — the side / primary label
+      - target3 : meta-label — rt3 when the target is touched cleanly;
+                  0 when stop2 (slack-expanded stop) is touched first.
+    When target2=False, target3 == rt3 (no meta-label filtering).
+
+    Also returns the per-decision first-touch bar index, the same-bar
+    ambiguity rate, and stop2 levels. Tail rows whose horizon window is
     incomplete are returned as a null/sentinel label and dropped downstream.
     """
 ```
+
+`target2=True` with `stop2_slack=1.0` reproduces v1's `TargetExtractor3`
+default exactly. `target2=False` produces a plain three-class label without the
+meta-label filter. Both are needed: `rt3` feeds D-014's primary side model;
+`target3` feeds the meta-model. See L-006 and D-014 for the full theoretical
+connection.
 
 ### Leakage discipline
 
@@ -106,7 +100,7 @@ def make_labels(
   the tail did exactly this; keep the behavior, drop the magic number in favor of
   a typed null.)
 
-### Tests
+### B.1 Tests
 
 - A handcrafted 1m path that touches profit-then-stop labels `+1`; stop-then-
   profit labels `−1`; neither labels `0`.
@@ -117,12 +111,17 @@ def make_labels(
   past the horizon yields `0`.
 - Tail rows with an incomplete window are dropped, not mislabeled.
 
-### Definition of done
+### B.1 Definition of done
 
 - `make_labels(...)` produces both arms with identical interfaces
+- Both `rt3` (side / primary label) and `target3` (meta-label) are returned
+  when `target2=True`; `stop2` levels are included in `LabelResult`
 - All tests pass, including the deliberate honest-vs-v1 disagreement case
+- A test asserts that when `stop2` is touched before the target,
+  `target3 = 0` while `rt3` still records the raw direction — confirming
+  the meta-label logic is correct independent of resolution arm
 - Same-bar ambiguity rate is computed and logged for both arms
-- D-002, D-003, D-006, D-012 entries written to DECISIONS.md
+- D-002, D-003, D-006, D-012, D-014, D-026 entries written to DECISIONS.md
 
 ---
 
@@ -234,7 +233,7 @@ def average_uniqueness(label_spans: list[tuple[int, int]]) -> np.ndarray:
     """LdP ch.4 average uniqueness per sample, from label outcome spans."""
 ```
 
-### Tests
+### B.3 Tests
 
 - No `train_idx` sample's label-outcome window overlaps its fold's `test_idx`
   (purge correctness).
@@ -246,7 +245,7 @@ def average_uniqueness(label_spans: list[tuple[int, int]]) -> np.ndarray:
 - `average_uniqueness` on a synthetic set of fully-overlapping labels approaches
   `1/n`; on fully-disjoint labels approaches `1.0`.
 
-### Definition of done
+### B.3 Definition of done
 
 - `splits.py` is the *only* place fold membership is defined; nothing downstream
   recomputes it

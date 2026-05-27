@@ -7,8 +7,8 @@ This file is the append-only log of design decisions.
 - Package manager: `uv` (fast, modern, lockfile-backed, has native ARM support)
 - Python: 3.12 (latest well-supported for ARM)
 - Dataframes:
-	- `polars` for I/O and preprocessing (better element, learning objective)
-	- `pandas` for sklearn/torch
+  - `polars` for I/O and preprocessing (better element, learning objective)
+  - `pandas` for sklearn/torch
 - Config: `pydantic-settings` (typed, env-aware settings and easier to override)
 - Experiment tracking: `mlflow` with local file backend for Layer 1
 - Testing: `pytest` with `tests/` discovery
@@ -34,7 +34,6 @@ The loader now reads the Parquet, checks for missing columns (hard error), then 
 This guarantees the output schema is always correct without rejecting recoverable mismatches.
 
 ---
-
 
 ## D-001 — Dual-arm methodology (governing rule)
 
@@ -206,6 +205,16 @@ This guarantees the output schema is always correct without rejecting recoverabl
   cost-adjusted breakeven once the D-011 cost model is fixed and record it
   alongside the pre-cost reference; the success threshold (D-008) judges against
   the cost-adjusted number.
+- **Added detail (2026-05-27) — theoretical basis.** The formula
+  `ℓ / (u + ℓ)` is the **expected-value breakeven** from basic probability:
+  if `p` is the hit rate and `(1−p)` the stop rate, expected P&L per unit =
+  `p·u − (1−p)·ℓ = 0` solves to `p = ℓ/(u+ℓ)`. This is also the
+  **Kelly fraction denominator** recentred on zero edge — not a heuristic but
+  a direct consequence of requiring non-negative expectation. The practical
+  implication: a strategy with 45% precision on this payoff already has
+  positive expectation pre-cost, yet reads as "below 50%" to naive
+  interpretation. Stating the true bar explicitly is not a cosmetic choice;
+  it changes whether individual fold results are read as passes or failures.
 
 ## D-008 — Success-threshold pre-registration
 
@@ -308,6 +317,20 @@ This guarantees the output schema is always correct without rejecting recoverabl
   chosen estimator, not the book's default. (For reference, the true-range term
   is `TR_t = max[H_t − L_t, |H_t − C_{t-1}|, |L_t − C_{t-1}|]`, with the gap
   terms capturing between-bar jumps.)
+- **Added detail (2026-05-27) — sources and extensions.**
+  ATR originates in J. Welles Wilder, *New Concepts in Technical Trading
+  Systems* (1978). The Wilder smoothing recurrence is:
+  `pATR[i] = (pATR[i−1] × (n−1) + pTR[i]) / n` with `n = 10`.
+  This is an exponential moving average with decay `α = 1/n`, identical to
+  `EMA(pTR, 2n−1)` in the standard `2/(span+1)` convention — the two forms
+  produce the same series.
+  v1 extends standard ATR in one deliberate way: the **`up_first` flag**,
+  derived from 1m sub-candles, makes the true range *directional*. A standard
+  ATR treats `|H−C_prev|` and `|L−C_prev|` symmetrically; the `up_first`
+  flag records whether the bar's net move was upward or downward, and the
+  barrier-resolution machinery uses this to determine which gap term is
+  "active." This is a v1 design choice, not standard Wilder ATR, and it feeds
+  directly into the 1m first-touch ordering used by D-006.
 
 ## D-013 — Feature-selection scope
 
@@ -354,6 +377,23 @@ This guarantees the output schema is always correct without rejecting recoverabl
 - **Recorded alternative.** Single-stage three-class / scalar head (v1, D-009) —
   kept as comparison arm. If meta-labeling is deferred to Layer 2, fall back to
   the directional collapse with `0` folded into "no-trade," and revisit.
+- **Added detail (2026-05-27) — v1 already implemented this implicitly.**
+  Analysis of v1's `TargetExtractor` family reveals that `target2=True` is an
+  **embedded, rule-based meta-labeling** step baked into the labeler itself:
+  - `rt3` = the *raw first crossing* = **primary label / side**.
+    Records which barrier was touched first regardless of confidence.
+  - `target3` = the *filtered label* = **meta-label**.
+    When `stop2` (the slack-expanded stop) is touched *before* the profit
+    target, `target3` is set to `0` — "ambiguous; don't act." When the profit
+    target is touched cleanly, `target3 = rt3`.
+  - `stop2` = `(1 − (m_stop + slack) × pATR) × price` is the **ambiguity
+    threshold**: if price gets this close to the stop, the trade is downgraded
+    from a signal to a non-event in the meta-label.
+  The two outputs (`rt3`, `target3`) therefore form exactly the (side, meta)
+  label pair that the v2 two-stage model consumes. The v1 labeler hard-coded
+  the meta-label rule; v2 (D-014) learns it from data. The v1-faithful arm
+  in Phase B must reproduce **both outputs**, not just `target3`; see PHASE_B.md
+  B.1 for the updated `make_labels` signature.
 
 ## D-015 — Labeling event filter (sampling cadence)
 
@@ -603,3 +643,36 @@ This guarantees the output schema is always correct without rejecting recoverabl
   hard-fail on the known Binance early-data timestamp anomaly (L-001)
   without delivering additional protection, since the anomaly is fully
   characterised and its downstream impact is bounded; rejected.
+
+## D-026 — Multi-timeframe pATR: longer-horizon ATR for target, shorter for stop
+
+- **Date:** 2026-05-27 — **Phase:** B (applies to TargetExtractors 2–4 in v1;
+  governs Phase B barrier construction in v2) — **Status:** Accepted (adopt v1)
+- **Decision.** When multiple pATR timeframes are available (15m / 60m / 240m,
+  or 5m / 15m / 60m / 240m), use a **longer-horizon pATR for the profit target**
+  and a **shorter-horizon pATR for the stop**. For example, TargetExtractor3
+  defaults to `target_patr = patr_240`, `stop_patr = patr_60`. The two can be
+  configured independently; the asymmetry is deliberate.
+- **v1 behavior.** TargetExtractor (single-timeframe) used native pATR for both.
+  TargetExtractors 2–4 introduced the MTF split, with `patr_240` for targets
+  and `patr_60` (plus `stop2` slack) for stops as the primary configuration.
+- **Verdict.** Adopt (no change from v1).
+- **Rationale.** The choice is an application of **volatility term structure**
+  reasoning to barrier design:
+  - A *longer-horizon ATR* (`patr_240`, 4h smoothing) is slower-moving and
+    wider. It gives the trade room to breathe through normal short-term noise
+    before declaring a win — the profit target only fires on a move that is
+    large relative to the medium-term regime, not a transient spike.
+  - A *shorter-horizon ATR* (`patr_60`, 1h smoothing) is more reactive. If
+    recent volatility rises, the stop tightens quickly, cutting losses before
+    the regime worsens further. If volatility falls, the stop gives more room
+    to avoid being picked off by microstructure noise.
+  Using a single pATR for both barriers creates a mismatch: a wide
+  (long-vol) stop pairs with a wide target, leading to many timeout labels in
+  calm regimes; a tight (short-vol) target fires too easily in volatile
+  regimes on moves that are not really "wins." The MTF split prevents both
+  failure modes and reduces the timeout (`0`) class relative to a
+  single-timeframe baseline.
+- **Recorded alternative.** Single-timeframe pATR for both barriers (v1's
+  TargetExtractor1 configuration) — kept as the single-timeframe comparison;
+  not the default for multi-timeframe runs.
