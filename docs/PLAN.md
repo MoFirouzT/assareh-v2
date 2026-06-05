@@ -35,8 +35,11 @@ The category is fixed when the decision is accepted:
 - **Leakage probes** — honest primary;
   the v1 configuration is run *once* to measure the inflation, then retired.
   Used when the v1 choice is a defect, not a design alternative.
-  Members:
-  D-004 embargo, D-006 barrier-touch resolution, D-010 walk-forward geometry, D-013 feature-selection scope.
+  Members fall into two sub-groups:
+  - *Statistical-discipline probes:*
+    D-004 embargo, D-006 barrier-touch resolution, D-010 walk-forward geometry, D-013 feature-selection scope.
+  - *Data-handling probes* (surfaced by the v1 audit, L-008–L-011):
+    D-036 gap-fill discipline, D-037 feature-frame NaN policy, D-038 pATR fill policy, D-039 cross-timeframe alignment method.
   Their inflations are the cells of the Phase E gap artifact.
 - **Retained comparison arms** —
   both arms run every fold, every evaluation, indefinitely.
@@ -95,6 +98,14 @@ evaluation-harness skeleton *before* writing any model.
   comparison arm (D-006). Barriers anchored on the 15m close (D-027); 1m
   intra-bar tie-break by `close > open` direction (D-028); MTF pATR split
   (longer-horizon pATR for target, shorter for stop, D-026)
+- **Data-handling leakage probes wired into label construction**
+  (L-008, L-010). The v1-faithful labeling arm additionally reproduces
+  *(i)* v1's non-causal `LinearInterpolator` gap fill on the 1m
+  resolution substrate before barrier walking (D-036) and
+  *(ii)* the `patr*.fillna('ffill').fillna('bfill')` chain inside
+  `TargetExtractor` (D-038). The honest arm leaves gaps observed (D-024)
+  and uses only pATR realised at or before `t`; bars where either is
+  unresolvable emit typed-null labels (D-029) rather than fabricated ones
 - **Meta-labeling outputs (D-014 gate).** `make_labels` returns both `rt3`
   (side / primary label) and `target3` (meta-label via `stop2` slack),
   matching v1's `TargetExtractor3`. Whether `target3` powers a two-stage
@@ -217,8 +228,10 @@ Baselines first, model later — this is the methodology checkpoint.
   rather than a re-derivation. Prevents the gap math from silently
   reweighting or redefining anything.
 - A reusable `evaluate(signals, prices, fold, *, arm) -> Metrics` interface;
-  `arm` selects which probe configuration is active (cost model, fill
-  resolution, embargo, geometry, feature scope) so a single call site can
+  `arm` selects which probe configuration is active across the full probe
+  catalogue (statistical-discipline: cost model, fill resolution, embargo,
+  geometry, feature scope; data-handling: gap-fill discipline, NaN policy,
+  pATR fill policy, cross-TF alignment method) so a single call site can
   drive every arm. This is the runtime form of the D-001 governing rule —
   every arm passes through the same code path
 
@@ -248,7 +261,16 @@ built in.
   val/test
 - Feature selection: Pearson correlation filter (0.95) + MI ranking as in v1,
   but **rerun per fold on training rows only** (honest arm); v1's single global
-  selection on 90% of data retained as a **selection-leakage probe**
+  selection on 90% of data retained as a **selection-leakage probe** (D-013)
+- **Data-handling leakage probes wired into feature assembly**
+  (L-008, L-009, L-011). The v1-faithful feature arm additionally
+  reproduces *(i)* v1's non-causal `LinearInterpolator` gap fill on
+  every input timeframe before indicator compute (D-036, downstream
+  side), *(ii)* the blanket `DataMixer.*.load_features` `bfill` on the
+  assembled feature frame (D-037), and *(iii)* the
+  `DataMixer3._mix_train` counter-walked multi-TF mix (D-039) in place of
+  the `merge_asof` join above. The honest arm leaves NaN cells untouched
+  and excludes affected rows in the batch sampler
 - Sample tensor matching v1's `(batch, 1, 21, 220)` shape
 - Tests asserting no future timestamps appear in any training sample's feature
   window
@@ -300,14 +322,23 @@ The verdict is appended to D-014 (Proposed → Accepted or Superseded) and to D-
 - Comparison plot: model (both arms) vs. each baseline on the same backtest
 - **The honest-vs-v1-faithful gap artifact** — the project's headline
   finding per VISION DoD #5. A table with one row per leakage discipline
-  (D-004 embargo, D-006 barrier resolution, D-010 walk-forward geometry,
-  D-013 feature-selection scope) and one column per headline metric
-  (net-of-cost precision-at-threshold, net P&L, DSR). Each cell holds
-  `v1_faithful − honest` with a label-overlap-aware (`N_eff`-based) CI.
-  A second view reports cumulative inflation when probes are stacked vs.
-  applied individually — the difference distinguishes additive leaks from
-  interacting ones. Stored as `reports/gap.parquet`, joined from the Phase C
-  per-arm schema (not recomputed), and rendered in `notebooks/results.ipynb`
+  and one column per headline metric (net-of-cost precision-at-threshold,
+  net P&L, DSR), grouped into two sub-blocks:
+  - *Statistical-discipline probes:* D-004 embargo, D-006 barrier
+    resolution, D-010 walk-forward geometry, D-013 feature-selection
+    scope.
+  - *Data-handling probes:* D-036 gap-fill discipline, D-037
+    feature-frame NaN policy, D-038 pATR fill policy, D-039
+    cross-timeframe alignment method.
+
+  Each cell holds `v1_faithful − honest` with a label-overlap-aware
+  (`N_eff`-based) CI. A second view reports cumulative inflation when
+  probes are stacked vs. applied individually — the difference
+  distinguishes additive leaks from interacting ones, and the
+  cross-block interaction (do data-handling leaks dominate or compound
+  the statistical ones?) is the most likely structural finding.
+  Stored as `reports/gap.parquet`, joined from the Phase C per-arm schema
+  (not recomputed), and rendered in `notebooks/results.ipynb`
 
 **The first moment of truth.** The numbers that come out of this phase are the
 project's core finding. They are checked against the success threshold

@@ -45,6 +45,10 @@ first line of the decision body, not in the status field.
 | D-033 | Forward-walk vectorization strategy                                   | B     | Accepted |
 | D-034 | Loader casts to canonical schema rather than asserting exact match    | A     | Accepted |
 | D-035 | Tooling stack (this iteration)                                        | A     | Accepted |
+| D-036 | Gap-fill discipline (leakage probe)                                   | B     | Accepted |
+| D-037 | Feature-frame NaN policy (leakage probe)                              | D     | Accepted |
+| D-038 | pATR fill policy in label construction (leakage probe)                | B     | Accepted |
+| D-039 | Cross-timeframe alignment method (leakage probe)                      | D     | Accepted |
 
 ---
 
@@ -555,6 +559,10 @@ first line of the decision body, not in the status field.
   checksum was actually verified, so it never overstates coverage.
 - **Recorded alternative.** Always require a checksum — blocks historical
   downloads for the majority of the dataset; rejected.
+- **Added detail (2026-06-05) — v1 has none of this discipline** (A.5,
+  L-015). The v1 audit confirms v1 performs no archive integrity
+  verification of any kind. D-019 is a v2-only discipline; no dual-arm
+  probe is needed.
 
 ## D-020 — ccxt tail bars: zero-fill missing ancillary columns
 
@@ -578,6 +586,11 @@ first line of the decision body, not in the status field.
 - **Recorded alternative.** NaN / null fill — propagates unpredictably
   through floating-point indicator math; rejected in favour of an explicit
   zero that can be detected and filtered deterministically.
+- **Added detail (2026-06-05) — v1 has no ccxt path** (A.5). The v1
+  audit confirms v1 fetches from a single source (Binance directly) with
+  no cross-source verification, and never reads the three ancillary
+  columns this decision governs. D-020 is a v2-only discipline; no
+  dual-arm probe.
 
 ## D-021 — OHLCV schema: 9 columns
 
@@ -628,6 +641,13 @@ first line of the decision body, not in the status field.
 - **Recorded alternative.** Treat every anomaly as a hard failure — would
   reject real-but-anomalous data (e.g., a single maintenance gap) and make
   the dataset effectively unusable; rejected.
+- **Added detail (2026-06-05) — v1 has none of this taxonomy**
+  (L-013, L-014, L-015). The v1 audit confirms v1 enforces no OHLC
+  arithmetic check, no NaN OHLC check, no price-bound check, and
+  silently clamps `volume < 1 → 1` rather than classifying zero-volume
+  bars as either hard or soft. D-022 is a v2-only discipline (no
+  separate dual-arm probe); v1-faithful reproductions inherit the lack
+  of validation by construction.
 
 ## D-023 — Price sanity bounds: close ∈ [100, 1 000 000] for BTC/USDT
 
@@ -671,6 +691,15 @@ first line of the decision body, not in the status field.
 - **Recorded alternative.** Forward-fill with previous bar's close — creates
   fictitious bars that distort volume-based features, OHLC arithmetic, and
   any volatility estimator; rejected.
+- **Added detail (2026-06-05) — operationalized as D-036**
+  (L-008). The v1 audit confirms v1's default
+  `LinearInterpolator._estimate_ohlcv_and_insert_the_candles` synthesizes
+  missing OHLCV by *non-causal* weighted average of the previous and
+  next available bar — a stronger violation than this entry's
+  "Recorded alternative" anticipated. D-036 turns the rule from a
+  v2-only discipline into a dual-arm leakage probe: the honest arm
+  enforces this entry; the v1-faithful arm reproduces v1's
+  interpolation once to measure the inflation.
 
 ## D-025 — Cross-timeframe alignment check severity: grid containment HARD, spacing and coverage SOFT
 
@@ -698,6 +727,15 @@ first line of the decision body, not in the status field.
   hard-fail on the known Binance early-data timestamp anomaly (L-001)
   without delivering additional protection, since the anomaly is fully
   characterised and its downstream impact is bounded; rejected.
+- **Added detail (2026-06-05) — reinforced by D-039**
+  (L-011, L-012). The v1 audit confirms v1 has no cross-timeframe
+  alignment check at all and assembles multi-TF features via
+  `DataMixer3._mix_train` counter-walking rather than timestamp join.
+  D-025 governs the *check* discipline; D-039 makes the *join method*
+  itself a dual-arm probe in Phase D. D-025 is a precondition for
+  D-039's honest arm to be sound — a `merge_asof` on misaligned grids
+  would produce wrong results silently. The two are complementary, not
+  overlapping.
 
 ## D-026 — Multi-timeframe pATR: longer-horizon ATR for target, shorter for stop
 
@@ -814,6 +852,15 @@ first line of the decision body, not in the status field.
     for unlabeled rows — rejected; `rt3.is_null()` already conveys
     unlabelability and a typed null is harder to misuse than a sentinel
     integer.
+- **Added detail (2026-06-05) — typed-null is the honest-arm signal
+  for D-036 and D-038.** The new probes both depend on D-029's
+  typed-null mechanism: when a label's resolution would require
+  synthesized data (a gap crossed by the 1m barrier walk, D-036; or a
+  NaN pATR at the anchor bar, D-038), the honest arm emits
+  `rt3 = null, target3 = null, is_complete = False`. v1's `fillna(33)`
+  magic-number tail (L-015) is the v1-faithful arm's counterpart, and
+  the gap between these two representations is exactly the inflation
+  D-036 / D-038 measure.
 
 ## D-030 — Phase-B module layout
 
@@ -952,3 +999,113 @@ first line of the decision body, not in the status field.
   — rejected: slower setup, no native lockfile, misses the Polars learning
   goal. A managed MLflow server would add ops surface without enough
   benefit to justify it in this iteration; rejected for now.
+
+## D-036 — Gap-fill discipline (leakage probe)
+
+- **Date:** 2026-06-05 — **Phase:** B (primary; downstream in D) — **Status:** Accepted
+- **Decision.** Leakage-probe flavor per D-001. *Honest arm primary*: gaps in
+  raw OHLCV are left as observed (D-024); barrier walks in `make_labels`
+  that would cross an unfilled gap return a typed-null label (D-029);
+  indicator lookbacks in Phase D that would cross a gap return masked
+  cells, dropped by the batch sampler. *v1-faithful arm* (run once, then
+  retired): reproduce v1's `LinearInterpolator` non-causal weighted-average
+  fill before labeling and feature compute.
+- **v1 behavior.** Default
+  `LinearInterpolator._estimate_ohlcv_and_insert_the_candles` synthesizes
+  missing OHLCV by weighted average of the *previous and next* available
+  bar — non-causal. Driven by
+  `BtcPreprocessor.interpolate_the_raw_data_and_add_up_first` for
+  1m / 15m / 1h / 4h. A causal alternative
+  (`_causal_estimate_ohlcv_and_insert_the_candles`) exists but is not
+  the default. See L-008.
+- **Verdict.** New (leakage probe).
+- **Rationale.** Every synthesized bar's high/low is a function of the
+  next real bar's OHLC. `TargetExtractor.detect_reversals` walks those
+  synthesized highs/lows during barrier resolution, so the label depends
+  on data after `t`. The same series feeds every TA indicator in Phase D,
+  so the leak compounds on the feature side. Among all v1 audit findings,
+  this is the most direct contamination of the label.
+- **Recorded alternative.** Use v1's causal mode for both arms — rejected;
+  v1's published numbers came from the non-causal default and the
+  gap-artifact row needs to measure *that* inflation, not a reformulated
+  hypothetical v1.
+
+## D-037 — Feature-frame NaN policy (leakage probe)
+
+- **Date:** 2026-06-05 — **Phase:** D — **Status:** Accepted
+- **Decision.** Leakage-probe flavor per D-001. *Honest arm primary*: NaN
+  cells in any feature column are left untouched; the model's batch
+  sampler masks rows whose sample window contains NaN in any consumed
+  feature (so indicator warm-up rows are excluded rather than
+  back-filled). *v1-faithful arm* (run once, then retired): reproduce
+  v1's blanket `btc_df.fillna(method='bfill')` at the equivalent assembly
+  step.
+- **v1 behavior.** All four `DataMixer` variants (`DataMixer`,
+  `defDataMixer`, `NoTRFDataMixer`, `logDataMixer`) apply `bfill` to the
+  entire feature frame at the end of `load_features`. See L-009.
+- **Verdict.** New (leakage probe).
+- **Rationale.** The `bfill` runs *after* multi-TF assembly, so a single
+  NaN cell can be filled from a row at a different real timestamp.
+  Indicator warm-up windows (e.g., the first ~20 rows of a 20-bar SMA)
+  are the most-affected region; since v1 doesn't trim warm-up rows before
+  training, the earliest training samples are entirely back-filled from
+  future. Distinct from D-036 because the NaN source is indicator
+  arithmetic, not missing data — both probes must be disabled in the
+  honest arm; v1 reproduces both.
+- **Recorded alternative.** Forward-fill instead — rejected; even causal
+  `ffill` on indicator warm-up rows fabricates values that didn't exist
+  at decision time. Honest semantics require masking, not synthesis.
+
+## D-038 — pATR fill policy in label construction (leakage probe)
+
+- **Date:** 2026-06-05 — **Phase:** B — **Status:** Accepted
+- **Decision.** Leakage-probe flavor per D-001. *Honest arm primary*:
+  barrier widths at bar `t` use only pATR realised at or before `t`. Bars
+  whose pATR is NaN at `t` (series start, gap-adjacent) emit a typed-null
+  label (D-029) rather than a fabricated one. *v1-faithful arm* (run
+  once, then retired): reproduce the
+  `patr*.fillna('ffill').fillna('bfill')` chain v1 runs inside
+  `TargetExtractor2` and `TargetExtractor3`.
+- **v1 behavior.** v1's `TargetExtractor2` and `TargetExtractor3` apply
+  `ffill` then `bfill` to `patr_15`, `patr_60`, `patr_240` *as part of
+  the label-construction step*. See L-010.
+- **Verdict.** New (leakage probe).
+- **Rationale.** The pATR series scales the triple-barrier widths
+  (longer-horizon for target, shorter for stop, per D-026). When `bfill`
+  runs inside the labeler, any bar with NaN pATR gets a barrier width
+  derived from *future* pATR observations — so the label's verdict
+  depends on data after `t`. Concentrated at series start (Wilder
+  warm-up) and gap-adjacent rows. Distinct from D-037 because it operates
+  on the labeling pathway rather than the feature pathway, and from D-036
+  because the NaN source is indicator warm-up, not missing data.
+- **Recorded alternative.** Use only `ffill` for both arms — rejected;
+  v1's published numbers came from the exact `ffill`+`bfill` chain and
+  the gap-artifact row needs to measure *that* inflation.
+
+## D-039 — Cross-timeframe alignment method (leakage probe)
+
+- **Date:** 2026-06-05 — **Phase:** D — **Status:** Accepted
+- **Decision.** Leakage-probe flavor per D-001. *Honest arm primary*:
+  multi-TF features assembled via `merge_asof` (backward direction,
+  strict) on the 15m decision clock — a higher-timeframe bar is visible
+  at or after its close, never the forming bar. Any timeframe without a
+  bar at or before the decision bar emits a typed-null cell. *v1-faithful
+  arm* (run once, then retired): reproduce v1's `DataMixer3._mix_train`
+  counter-walk over per-TF frames using integer counters `i1, i2, i3`.
+- **v1 behavior.** Each timeframe loaded independently with the same
+  `first_day` / `last_day` window. The mixer walks the four per-TF frames
+  with integer counters and emits one row per tick. No timestamp join,
+  no intersection check. See L-011.
+- **Verdict.** New (leakage probe).
+- **Rationale.** Counter-walking assumes uniform coverage across
+  timeframes. Any drift — a missing day, a snap-collision drop (L-012),
+  a quirk-window realignment (L-001) — causes bars from different real
+  timestamps to be stitched together as if aligned, and the drift
+  accumulates silently. Distinct from D-036 (missing data) and D-037
+  (NaN fill) because the leak is *misalignment*, not synthesis.
+  Reinforces D-025's cross-TF alignment check by making the join method
+  itself the probe target.
+- **Recorded alternative.** Reject v1's mixer and use only `merge_asof`
+  for both arms — rejected; v1's published numbers came from the
+  counter-walked mix and the gap-artifact row needs to measure *that*
+  inflation.

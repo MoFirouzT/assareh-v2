@@ -165,7 +165,9 @@ def make_labels(
     m_target: float = 4.0,
     m_stop: float = 2.5,
     horizon_bars: int = 511,
-    resolution: Literal["1m", "15m"] = "1m",   # "15m" == v1-faithful arm
+    resolution: Literal["1m", "15m"] = "1m",   # "15m" == v1-faithful arm (D-006)
+    gap_fill: Literal["observed", "v1_noncausal"] = "observed",          # D-036 probe: gap discipline on df1m
+    patr_fill: Literal["realised_only", "v1_ffill_bfill"] = "realised_only",  # D-038 probe: pATR fill inside labeler
     target2: bool = True,          # produce meta-label (target3) alongside side (rt3)
     stop2_slack: float = 1.0,      # stop2 = (1 − (m_stop + slack) × stop_patr) × price
 ) -> LabelResult:
@@ -178,6 +180,18 @@ def make_labels(
 
     Setting target_patr_col == stop_patr_col reproduces the single-timeframe
     v1-`TargetExtractor1` configuration (comparison only; not the default).
+
+    gap_fill selects the data-handling probe at the 1m substrate (D-036):
+      - 'observed' (honest, default): the walk halts at any missing 1m bar
+        inside the horizon; unresolved labels emit typed null (D-029).
+      - 'v1_noncausal': apply v1's LinearInterpolator non-causal
+        weighted-average fill to df1m before the walk; reproduces L-008.
+
+    patr_fill selects the data-handling probe at the pATR series (D-038):
+      - 'realised_only' (honest, default): NaN pATR at the decision bar
+        emits typed null for the row (no fabricated barrier width).
+      - 'v1_ffill_bfill': apply patr_*.fillna('ffill').fillna('bfill')
+        before barrier construction; reproduces L-010.
 
     When target2=True, returns both:
       - rt3  : raw first crossing in {-1, 0, +1}  — the side / primary label
@@ -285,6 +299,53 @@ Python loop over decision points:
 The whole pipeline stays lazy until the final `.collect()` at the boundary,
 per the Polars convention in CLAUDE.md.
 
+### Data-handling leakage probes (D-036, D-038)
+
+Two probes from the v1 audit (L-008, L-010) land at this step rather than
+in feature engineering, because both affect the *label's* dependence on
+data beyond `t`. Each is a leakage probe per D-001 — honest arm primary,
+v1-faithful arm run *once* to measure inflation, then retired.
+
+**Gap-fill discipline (D-036).** The 1m forward walk consumes `df1m` for
+barrier resolution. If a 1m bar is missing inside a decision's horizon
+window:
+
+- *Honest arm* (`gap_fill="observed"`, default). The walk halts at the
+  first missing 1m bar in its forward path. If no barrier was touched
+  before the gap, the label emits typed null (`rt3 = null`,
+  `target3 = null`, `is_complete = False`, per D-029). The conservative
+  rule (any in-window gap → unresolvable) is the spec default; a refined
+  rule that emits null only when the gap could have changed the outcome
+  is a tracked follow-up for after B.2 quantifies how much sample the
+  conservative rule costs.
+- *v1-faithful arm* (`gap_fill="v1_noncausal"`). Apply v1's
+  `LinearInterpolator._estimate_ohlcv_and_insert_the_candles` non-causal
+  weighted-average fill to `df1m` before the walk. Synthesized bars
+  participate in barrier resolution; resulting labels carry the
+  future-bar contamination L-008 documents.
+
+**pATR fill policy (D-038).** Barriers at `t` are sized from
+`target_patr_col[t]` and `stop_patr_col[t]`. When either is NaN at `t`
+(series start, gap-adjacent, indicator warm-up):
+
+- *Honest arm* (`patr_fill="realised_only"`, default). Emit typed null
+  for the entire `LabelResult` row — the label is unresolvable without
+  a realised barrier width at `t`.
+- *v1-faithful arm* (`patr_fill="v1_ffill_bfill"`). Apply
+  `target_patr_col.fillna(method='ffill').fillna(method='bfill')` (and
+  the same for `stop_patr_col`) on a *copy* of the relevant columns
+  before barrier construction. Reproduces the chain `TargetExtractor2`
+  and `TargetExtractor3` run internally; resulting barriers carry the
+  future-pATR contamination L-010 documents. The fill operates on a
+  copy so the input `df15` is not mutated.
+
+Both arms share every other code path — the forward-walk vectorization,
+the entry-price convention (D-027), the 1m intra-bar tie-break (D-028),
+the `LabelResult` schema (D-029). The two probe parameters compose
+independently with `resolution` (D-006), giving `2 × 2 × 2 = 8` arm
+configurations at the labeler. The trial set in D-008's `V` accounting
+must include these as distinct trials; B.4's pre-registration pins this.
+
 ### Leakage discipline
 
 - The label at decision time `t` uses only bars **after** `t` for the forward
@@ -322,6 +383,28 @@ unchanged — barrier-path tests are a separate concern.
   that barriers are anchored on that value, not the open or `next_open`.
 - Tail rows with an incomplete window carry `is_complete = False`, `rt3 = null`,
   and the row remains in the frame (D-029).
+- Gap-fill discipline (D-036). A handcrafted path where:
+  - *(a)* the honest arm resolves a barrier *before* an in-horizon gap →
+    label is non-null and matches the resolution.
+  - *(b)* the honest arm reaches an in-horizon gap before any barrier
+    touch → label is typed null with `is_complete = False`.
+  - *(c)* the v1-faithful arm (`gap_fill="v1_noncausal"`) on the same
+    input synthesizes the gap via non-causal weighted average and
+    produces a non-null label.
+
+  Assert (b) and (c) on the same input give different `LabelResult`
+  rows — this is the D-036 probe in miniature.
+- pATR fill policy (D-038). A path where `target_patr_col[t]` or
+  `stop_patr_col[t]` is NaN at the decision bar (e.g., before Wilder
+  warm-up, or at the bar immediately after a gap that L-001 documents).
+  - Honest arm (`patr_fill="realised_only"`, default): row emits typed
+    null.
+  - v1-faithful arm (`patr_fill="v1_ffill_bfill"`): pATR is filled from
+    a later realised value, barriers are computed from the filled width,
+    label is non-null.
+
+  Assert the two arms produce different rows on the same input — this
+  is the D-038 probe in miniature.
 
 ### B.1 Definition of done
 
@@ -336,8 +419,14 @@ unchanged — barrier-path tests are a separate concern.
 - `LabelResult` schema (D-029) is honored; tail rows sentineled but retained
 - Entry-price convention (D-027) and 1m intra-bar tie-break (D-028) are
   implemented and exercised by tests
-- D-002, D-003, D-006, D-012, D-014, D-026, D-027, D-028, D-029, D-033 entries
-  reflected in DECISIONS.md (D-033 governs the Polars forward-walk strategy)
+- `gap_fill` and `patr_fill` arm parameters wired into `make_labels` with
+  the honest defaults (`"observed"`, `"realised_only"`); the v1-faithful
+  values (`"v1_noncausal"`, `"v1_ffill_bfill"`) reproduce v1's L-008 and
+  L-010 behaviors and pass the dedicated D-036 / D-038 tests above
+- D-002, D-003, D-006, D-012, D-014, D-026, D-027, D-028, D-029, D-033,
+  D-036, D-038 entries reflected in DECISIONS.md (D-033 governs the
+  Polars forward-walk strategy; D-036 and D-038 are the data-handling
+  leakage probes from the v1 audit)
 
 ---
 
@@ -545,7 +634,7 @@ Pinned values, before any model is fit:
 | `K` (pass folds)  | **5** (60% pass rate)       | this phase          |
 | DSR confidence    | **0.95**                    | default             |
 | PBO ceiling       | **0.2**                     | default             |
-| `V` source        | **trial-set estimator**: variance of Sharpe across `folds × dual arms × baselines`, all logged to MLflow | D-008 added detail (option b) |
+| `V` source        | **trial-set estimator**: variance of Sharpe across `folds × probe arms × baselines`. Probe arms span the full catalogue (5 statistical-discipline + 4 data-handling) per Phase C `evaluate()`'s `arm` parameter; all logged to MLflow | D-008 added detail (option b); D-036–D-039 expansion |
 
 The `V` source is the trial-set estimator (not reduced CPCV), because
 pre-registration must complete at the end of Phase B and the CPCV path
@@ -561,8 +650,12 @@ output exists. They are now fixed.
   including the new entries for entry price (D-027), intra-bar tie-break (D-028),
   `LabelResult` schema (D-029), module layout (D-030), pATR module location
   (D-031), and forward-walk vectorization (D-033); status updates on D-008
-  (pinned values), D-010 (concrete sizing), D-015 (out of scope for this iteration),
-  and D-016 (scheme value reserved)
+  (pinned values, expanded V trial-set), D-010 (concrete sizing), D-015 (out of
+  scope for this iteration), and D-016 (scheme value reserved). The
+  data-handling probes D-036 (gap-fill discipline) and D-038 (pATR fill policy
+  in labeler) are wired into `make_labels` at this phase per the v1 audit
+  (L-008, L-010); D-037 and D-039 are Phase D concerns and remain Proposed-but-
+  not-yet-implemented at the B checkpoint
 - LEARNINGS.md updated with the target diagnostics, the same-bar ambiguity rate
   at both grains, the Q4 `shift(3)` verdict from B.0, and the embargo
   leakage-probe delta if run
@@ -588,6 +681,15 @@ output exists. They are now fixed.
 - **No CPCV implementation in Phase B (D-016).** The `cpcv` scheme value is
   reserved in `make_walkforward_folds` so Phase C consumers don't reshape the
   API, but the implementation lands in Phase C.
+- **No feature-side data-handling probes (D-037, D-039).** Phase B wires
+  D-036 and D-038 at the labeling step because both directly affect the
+  label's dependence on data beyond `t`. The *feature-side* of D-036 (the
+  same interpolated 1m / 15m / 1h / 4h series feeding indicators), plus
+  D-037 (`DataMixer`'s blanket `bfill`) and D-039 (cross-TF mixing method),
+  are Phase D's responsibility and land in feature assembly. Phase B does
+  not preemptively define their arm parameters or assemble multi-TF
+  features; that boundary is the same one D-010's purge / embargo
+  enforces in the temporal direction.
 
 If you find yourself wanting any of these to "see if the target works," stop:
 that impulse is exactly what the phase ordering exists to prevent.

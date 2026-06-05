@@ -509,6 +509,97 @@ met; the entries below tick them off explicitly.
 
 - pATR computation — moved to Phase B (B.0) per D-031; `attach_patr` lives at
   `src/assareh/features/patr.py`
-- CI workflow — Phase A spec deferred this; revisit when Phase B code lands
+- CI workflow — **resolved**: a minimal GitHub Actions scaffold (`uv sync`
+  → `ruff` → `mypy` → `pytest`) is now a Phase B deliverable in PLAN.md,
+  landing before the leakage-sensitive label/split/weight code merges
+- v1 data-handling comparison — **closed in A.5 below**
+
+---
+
+## A.5 — v1 data-handling comparison (closed 2026-06-05)
+
+The v1-vs-v2 data-handling comparison that A.4 flagged as a follow-up
+landed here. Methodology: a self-contained audit prompt was handed to a
+separate Claude session with read access to the v1 repo; the session
+returned a row-per-anomaly report covering 21 numbered anomalies plus
+four cross-cutting findings, each with `path/file.py:LINE` citations into
+the v1 codebase.
+
+**Findings appended to LEARNINGS.md** (each entry includes v1 code
+citations and the implication for the affected v2 phase):
+
+- L-008 — v1's default `LinearInterpolator` is non-causal (weighted
+  average of *previous and next* available bar) and contaminates the
+  triple-barrier target resolution.
+- L-009 — v1's `DataMixer.*.load_features` applies blanket
+  `btc_df.fillna(method='bfill')` to the assembled feature frame.
+- L-010 — v1's `patr*` series is `ffill`+`bfill`'d *inside*
+  `TargetExtractor2/3`, so barrier widths in early data depend on future
+  pATR observations.
+- L-011 — v1's multi-TF mix (`DataMixer3._mix_train`) walks per-TF frames
+  with integer counters rather than joining on timestamp; coverage drift
+  silently stitches bars from different real times.
+- L-012 — v1 silently floor-snaps off-grid bars per timeframe and
+  includes the L-001 Binance quirk window (2017-12-04 → 2018-02-10) in
+  training with no cross-TF awareness or quirk-aware exclusion.
+- L-013 — v1 has no OHLC arithmetic check at any stage; broken bars feed
+  ATR / BB / Donchian and the target detector unchanged.
+- L-014 — v1 silently clamps `volume < 1 → 1` (so `log_volume = 0` for
+  every legitimately zero-volume bar in early data).
+- L-015 — minor v1 fill and convention behaviors (catch-all): silent
+  duplicate drop on snap collision, silent sort after interpolation,
+  tz-naïve timestamps throughout (with implicit local-time risk in the
+  seed script `add_kick_start_data_to_db.py`),
+  `_create_log_alternative_candles` first-row `fillna('backfill')`, and
+  the `fillna(value=33)` sentinel for "no-decision" target rows.
+
+**New dual-arm leakage probes opened** (DECISIONS.md):
+
+- D-036 — gap-fill discipline (label + feature pathways; motivated by L-008)
+- D-037 — feature-frame NaN policy (Phase D; motivated by L-009)
+- D-038 — pATR fill policy in label construction (Phase B; motivated by L-010)
+- D-039 — cross-timeframe alignment method (Phase D; motivated by L-011)
+
+All four follow D-001's leakage-probe flavor (honest primary, v1-faithful
+arm run *once* to measure inflation, then retired). PLAN.md's dual-arm
+catalogue was extended to two sub-groups — *statistical-discipline
+probes* (D-004, D-006, D-010, D-013) and *data-handling probes* (D-036
+through D-039) — and the Phase E gap artifact now reports both sub-blocks
+with a cross-block interaction view.
+
+**Qualitative finding worth recording up front.** L-008's non-causal
+interpolation is the most direct contamination of the label: the
+`TargetExtractor.detect_reversals` forward walk reads the *next bar's*
+OHLC via the synthesized bar that fills any gap in its path. L-010's
+pATR `bfill` is the second-most direct (it changes the barrier widths
+the walk uses). Both are labeling-pathway leaks and both compound with
+the established statistical-discipline probes (D-004 embargo, D-006
+barrier resolution) because they operate before those checks see the
+data. **Plausible expectation, to be confirmed by the Phase E gap
+artifact:** data-handling leaks dominate the apparent v1 edge, and the
+statistical-discipline leaks layer on top.
+
+**Confirmed v1 non-issues** (no v2 probe needed, recorded for completeness):
+
+- v1 uses CSV only — v2's D-034 Parquet schema-cast discipline has no v1
+  counterpart.
+- v1 doesn't read `number_of_trades` or `taker_buy_*` columns — v2's
+  D-020 structural-zero handling is honest-arm-only.
+- v1 doesn't verify Binance archive integrity — D-019 is v2-only.
+- v1 fetches from a single source — the ccxt overlap-verification path
+  is v2-only.
+
+**Definition of done — verified:**
+
+- [x] v1 audit report received with file:line citations for every
+  numbered anomaly
+- [x] L-008 through L-015 appended to LEARNINGS.md
+- [x] D-036 through D-039 appended to DECISIONS.md and added to the
+  index
+- [x] PLAN.md updated: dual-arm catalogue re-grouped, Phase B label and
+  Phase D feature deliverables wire the new probes, Phase C `evaluate()`
+  arm dimensions extended, Phase E gap artifact restructured into two
+  sub-blocks
+- [x] A.4's deferred "v1 data-handling comparison" item closed
 
 ---
