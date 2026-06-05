@@ -11,41 +11,45 @@
 ```text
 assareh-v2/ (repo root)
 ├── pyproject.toml
-├── uv.lock                 
+├── uv.lock
 ├── README.md
 ├── LICENSE
 ├── CLAUDE.md
-├── docs/                   
+├── docs/
 │   ├── PHASE_A.md          # this file
 │   ├── PHASE_B.md
 │   ├── VISION.md
 │   ├── PLAN.md
-│   ├── DECISIONS.md       
-│   └── LEARNINGS.md       
+│   ├── DECISIONS.md
+│   ├── LEARNINGS.md
+│   └── GLOSSARY.md
 ├── .gitignore
-├── .env.example           
+├── .env.example
 ├── src/
 │   └── assareh/
 │       ├── __init__.py
-│       ├── config.py       
-│       └── data/
+│       ├── config.py
+│       ├── data/
+│       │   ├── __init__.py
+│       │   ├── schemas.py
+│       │   ├── loader.py
+│       │   └── integrity.py
+│       └── features/       # lands in Phase B (D-031)
 │           ├── __init__.py
-│           ├── schemas.py  
-│           ├── loader.py   
-│           └── integrity.py 
+│           └── patr.py     # B.0, multi-tf pATR
 ├── scripts/
-│   ├── data_downloader.py        
-│   └── fetch_binance_ohlcv.py    
+│   ├── data_downloader.py
+│   └── fetch_binance_ohlcv.py
 ├── tests/
 │   ├── __init__.py
-│   ├── conftest.py         
-│   ├── test_integrity.py  
+│   ├── conftest.py         # synthetic_ohlcv fixture
+│   ├── test_integrity.py
 │   └── test_placeholder.py
 ├── data/
-│   ├── raw/                
-│   ├── interim/           
-│   └── external/           
-└── notebooks/              
+│   ├── raw/                # btcusdt_{1m,15m,1h,4h}.parquet + checksums.jsonl
+│   ├── interim/
+│   └── external/
+└── notebooks/
 ```
 
 **Tooling decisions (logged in DECISIONS.md):**
@@ -364,12 +368,15 @@ def load_ohlcv(
     timeframe: Literal["1m", "15m", "1h", "4h"],
     settings: Settings,
 ) -> pl.DataFrame:
-    """Load raw OHLCV from Parquet. Asserts schema matches OHLCV_SCHEMA."""
+    """Load raw OHLCV from Parquet, casting columns to OHLCV_SCHEMA types."""
 ```
 
 Single function.
 Path comes from `settings.raw_dir`.
-Schema assertion is a hard check, not a warning — if the file on disk drifts from `OHLCV_SCHEMA`, fail loudly.
+Per **D-034**, the loader hard-fails if any canonical column is missing, then **casts every column to `OHLCV_SCHEMA` types** rather than asserting strict schema equality.
+Rationale: the downloader writes Parquet via pandas, which round-trips `Datetime` timestamps at `ms` precision while the canonical schema specifies `us`;
+a strict equality check would reject valid data that differs only in precision.
+The cast is paid once at load time and guarantees downstream code always sees the canonical schema (see L-004).
 
 ### Integrity checks: `src/assareh/data/integrity.py`
 
