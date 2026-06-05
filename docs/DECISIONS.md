@@ -3,7 +3,7 @@
 This file is the append-only log of design decisions.
 
 **Status taxonomy:** `Accepted` · `Proposed` · `Rejected` · `Superseded`.
-Qualifiers (e.g. "compute-gated", "governing", "Layer 1 only") live in the
+Qualifiers (e.g. "compute-gated", "governing", "this iteration only") live in the
 first line of the decision body, not in the status field.
 
 ## Index
@@ -44,7 +44,7 @@ first line of the decision body, not in the status field.
 | D-032 | `label_spans` representation                                          | B     | Accepted |
 | D-033 | Forward-walk vectorization strategy                                   | B     | Accepted |
 | D-034 | Loader casts to canonical schema rather than asserting exact match    | A     | Accepted |
-| D-035 | Layer-1 tooling stack                                                 | A     | Accepted |
+| D-035 | Tooling stack (this iteration)                                        | A     | Accepted |
 
 ---
 
@@ -81,7 +81,7 @@ first line of the decision body, not in the status field.
 - **Rationale.** No methodological problem with v1's cadence; changing it would
   break comparability for no benefit. Cadence sets sample count, label overlap,
   and turnover, so it is fixed deliberately rather than by default.
-- **Recorded alternative.** 1m, 1h, or 4h cadence — not pursued in Layer 1.
+- **Recorded alternative.** 1m, 1h, or 4h cadence — not pursued in this iteration.
 
 ## D-003 — Vertical barrier: horizon length and no-touch handling
 
@@ -341,41 +341,32 @@ first line of the decision body, not in the status field.
 ## D-012 — pATR definition lock
 
 - **Date:** 2026-05-22 — **Phase:** B — **Status:** Accepted
-- **Decision.** Adopt v1's proportional ATR exactly: Wilder smoothing, window 10,
-  directional true range via the `up_first` flag derived from 1m sub-candles;
-  `p_atr[i] = (p_atr[i-1]·(window-1) + p_true_range[i]) / window`. Keep the
-  `shift(3)` lag on higher-timeframe pATR. Lock the formula; no changes.
+- **Decision.** Adopt v1's **percent ATR** (pATR) exactly: Wilder smoothing
+  with window 10, directional true range via the `up_first` flag derived
+  from 1m sub-candles, and the `shift(3)` lag on higher-timeframe pATR.
+  Lock the formula; no changes. Definition, `pTR` formula, Wilder
+  recurrence, and `up_first` mechanics live in
+  [`GLOSSARY.md`](GLOSSARY.md).
 - **v1 behavior.** Identical (this is v1's design).
 - **Verdict.** Adopt (no change).
-- **Rationale.** Well-constructed and already leakage-aware (completed bars only;
-  `shift(3)` prevents current-bar bleed). It is also the same 1m machinery D-006
-  relies on. No reason to alter it.
+- **Rationale.** Well-constructed and already leakage-aware (completed bars
+  only; `shift(3)` prevents current-bar bleed). It is also the same 1m
+  machinery D-006 relies on. No reason to alter it.
 - **Recorded alternative.** A standard (non-directional) ATR — would break
   comparability and discard a sound design; not used.
-- **Added detail (2026-05-25) — estimator-faithfulness footnote.** For the
-  record: López de Prado's reference sets the volatility target `trgt` to an
-  **EWMA standard deviation of close-to-close returns**, not to ATR. ATR is built
-  from the high / low / previous-close true range and is a different (though
-  closely related) estimator. We deliberately **retain** v1's pATR for
-  faithfulness; the EWMA-of-returns alternative is noted and **not adopted**. No
-  methodology conflict — only an explicit acknowledgment that `trgt ≡ pATR` is a
-  chosen estimator, not the book's default. (For reference, the true-range term
-  is `TR_t = max[H_t − L_t, |H_t − C_{t-1}|, |L_t − C_{t-1}|]`, with the gap
-  terms capturing between-bar jumps.)
-- **Added detail (2026-05-27) — sources and extensions.**
-  ATR originates in J. Welles Wilder, *New Concepts in Technical Trading
-  Systems* (1978). The Wilder smoothing recurrence is:
-  `pATR[i] = (pATR[i−1] × (n−1) + pTR[i]) / n` with `n = 10`.
-  This is an exponential moving average with decay `α = 1/n`, identical to
-  `EMA(pTR, 2n−1)` in the standard `2/(span+1)` convention — the two forms
-  produce the same series.
-  v1 extends standard ATR in one deliberate way: the **`up_first` flag**,
-  derived from 1m sub-candles, makes the true range *directional*. A standard
-  ATR treats `|H−C_prev|` and `|L−C_prev|` symmetrically; the `up_first`
-  flag records whether the bar's net move was upward or downward, and the
-  barrier-resolution machinery uses this to determine which gap term is
-  "active." This is a v1 design choice, not standard Wilder ATR, and it feeds
-  directly into the 1m first-touch ordering used by D-006.
+- **Estimator-faithfulness note (2026-05-25).** López de Prado's reference
+  sets the volatility target `trgt` to an **EWMA standard deviation of
+  close-to-close returns**, not to ATR. ATR is a different (though closely
+  related) estimator. We deliberately **retain** v1's pATR for faithfulness;
+  the EWMA-of-returns alternative is noted and **not adopted**. No
+  methodology conflict — only an explicit acknowledgment that `trgt ≡ pATR`
+  is a chosen estimator, not the book's default.
+- **See also.** [`GLOSSARY.md`](GLOSSARY.md) →
+  [pATR](GLOSSARY.md#patr-percent-atr) ·
+  [pTR](GLOSSARY.md#ptr-percent-true-range) ·
+  [Wilder smoothing](GLOSSARY.md#wilder-smoothing) ·
+  [`up_first` flag](GLOSSARY.md#up_first-flag) ·
+  [`shift(3)` lag](GLOSSARY.md#shift3-lag).
 
 ## D-013 — Feature-selection scope
 
@@ -397,9 +388,9 @@ first line of the decision body, not in the status field.
 ## D-014 — Meta-labeling (side / size decomposition)
 
 - **Date:** 2026-05-25 — **Phase:** E (decided in B) — **Status:** Proposed
-- **Open question to resolve before Phase E begins:** ratify Layer-1 vs
-  Layer-2 placement. If deferred to Layer 2, fall back to D-009's single-stage
-  arms.
+- **Open question to resolve before Phase E begins:** ratify whether
+  meta-labeling stays in this iteration or moves to a follow-on iteration.
+  If deferred, fall back to D-009's single-stage arms.
 - **Decision.** Model the target as **side then size**. The primary model
   (`ConvWideDeepLSTMNet`) predicts direction; a separate **binary meta-model**,
   trained only on bars where the primary takes a position (`ŝ_t ≠ 0`), predicts
@@ -422,7 +413,7 @@ first line of the decision body, not in the status field.
   than 0.5 — the symmetric-payoff centring is wrong for a 4 : 2.5 payoff and
   would contradict the economic decision near `p = 0.45`.
 - **Recorded alternative.** Single-stage three-class / scalar head (v1, D-009) —
-  kept as comparison arm. If meta-labeling is deferred to Layer 2, fall back to
+  kept as comparison arm. If meta-labeling is deferred to a follow-on iteration, fall back to
   the directional collapse with `0` folded into "no-trade," and revisit.
 - **Added detail (2026-05-27) — v1 already implemented this implicitly.**
   Analysis of v1's `TargetExtractor` family reveals that `target2=True` is an
@@ -445,7 +436,7 @@ first line of the decision body, not in the status field.
 ## D-015 — Labeling event filter (sampling cadence)
 
 - **Date:** 2026-05-25 — **Phase:** B — **Status:** Rejected
-- **Scope of rejection:** Layer 1 only; revisit in Layer 2 if the B.2
+- **Scope of rejection:** this iteration only; revisit in a follow-on iteration if the B.2
   diagnostics motivate it.
 - **Decision.** Honest arm samples decision points with a **symmetric CUSUM
   filter** on de-meaned 15m returns: `S⁺_t = max(0, S⁺_{t-1} + r_t − E[r_t])`,
@@ -464,15 +455,15 @@ first line of the decision body, not in the status field.
   a finding. Recommend a **pATR-scaled `κ`** so the trigger breathes with
   volatility (D-012 units). The filter uses past returns only — no look-ahead.
 - **Recorded alternative.** Fixed 15m-close cadence (v1, D-002) — the comparison
-  arm and the default if CUSUM is descoped from Layer 1.
+  arm and the default if CUSUM is descoped from this iteration.
 - **Added detail (2026-05-27) — descoped.** CUSUM event sampling is **out of
-  scope for Layer 1**. Honest-arm cadence stays at every 15m close (D-002).
+  scope for this iteration**. Honest-arm cadence stays at every 15m close (D-002).
   Rationale: B.2 already produces the diagnostics (timeout fraction, average
   uniqueness / `N_eff`) that would motivate CUSUM; if those numbers reveal the
   fixed-clock cadence is hurting more than helping, the filter can be added in
-  Layer 2 as an honest-arm refinement without disturbing the Phase-B label /
+  a follow-on iteration as an honest-arm refinement without disturbing the Phase-B label /
   split / weight contracts. Pinning `κ` and re-measuring is also itself a
-  multi-day investigation; deferring it keeps Layer 1 focused.
+  multi-day investigation; deferring it keeps this iteration focused.
 
 ## D-016 — Backtest geometry: walk-forward vs. CPCV
 
@@ -508,8 +499,8 @@ first line of the decision body, not in the status field.
 ## D-017 — Time-decay on sample weights
 
 - **Date:** 2026-05-25 — **Phase:** B — **Status:** Accepted
-- **Verdict in one line:** resolved to "off" — no time-decay layer in Layer 1.
-- **Decision.** **No time decay** in Layer 1. Final weight = `class × uniqueness`
+- **Verdict in one line:** resolved to "off" — no time-decay layer in this iteration.
+- **Decision.** **No time decay** in this iteration. Final weight = `class × uniqueness`
   (D-005) with de Prado's piecewise-linear decay on cumulative uniqueness disabled
   (`c = 1`).
 - **v1 behavior.** No time decay either — so there is no faithfulness conflict;
@@ -722,25 +713,22 @@ first line of the decision body, not in the status field.
   TargetExtractors 2–4 introduced the MTF split, with `patr_240` for targets
   and `patr_60` (plus `stop2` slack) for stops as the primary configuration.
 - **Verdict.** Adopt (no change from v1).
-- **Rationale.** The choice is an application of **volatility term structure**
-  reasoning to barrier design:
-  - A *longer-horizon ATR* (`patr_240`, 4h smoothing) is slower-moving and
-    wider. It gives the trade room to breathe through normal short-term noise
-    before declaring a win — the profit target only fires on a move that is
-    large relative to the medium-term regime, not a transient spike.
-  - A *shorter-horizon ATR* (`patr_60`, 1h smoothing) is more reactive. If
-    recent volatility rises, the stop tightens quickly, cutting losses before
-    the regime worsens further. If volatility falls, the stop gives more room
-    to avoid being picked off by microstructure noise.
-  Using a single pATR for both barriers creates a mismatch: a wide
-  (long-vol) stop pairs with a wide target, leading to many timeout labels in
-  calm regimes; a tight (short-vol) target fires too easily in volatile
-  regimes on moves that are not really "wins." The MTF split prevents both
-  failure modes and reduces the timeout (`0`) class relative to a
-  single-timeframe baseline.
+- **Rationale.** Volatility-term-structure asymmetry. A longer-horizon pATR
+  scales the target to the medium-term regime (filters transient spikes);
+  a shorter-horizon pATR scales the stop to recent volatility (tightens
+  quickly in choppy regimes, widens in calm ones). A single pATR for both
+  barriers creates a mismatch and inflates the timeout class relative to the
+  MTF split. Mechanism is fleshed out in
+  [GLOSSARY → MTF pATR](GLOSSARY.md#mtf-patr-multi-timeframe-asymmetry); the
+  empirical reasoning behind the discovery is in LEARNINGS L-007.
 - **Recorded alternative.** Single-timeframe pATR for both barriers (v1's
   TargetExtractor1 configuration) — kept as the single-timeframe comparison;
   not the default for multi-timeframe runs.
+- **See also.** [`GLOSSARY.md`](GLOSSARY.md) →
+  [MTF pATR](GLOSSARY.md#mtf-patr-multi-timeframe-asymmetry) ·
+  [pATR](GLOSSARY.md#patr-percent-atr) ·
+  [Profit barrier](GLOSSARY.md#profit-barrier) ·
+  [Stop barrier](GLOSSARY.md#stop-barrier).
 
 ## D-027 — Entry-price convention: close of the 15m bar at `t`
 
@@ -760,7 +748,7 @@ first line of the decision body, not in the status field.
   conservatism that is not in the v1 reference and would require its own
   honest-arm justification.
 - **Recorded alternative.** Anchor on the open of the **next** 15m bar at
-  `t+1` (no current-bar bleed in the price either) — rejected for Layer 1 as
+  `t+1` (no current-bar bleed in the price either) — rejected for this iteration as
   unnecessary; revisit only if leakage analysis finds the close anchor lets a
   feature-side leak survive.
 
@@ -911,7 +899,7 @@ first line of the decision body, not in the status field.
   dependency and a second code path that needs to stay in sync with the
   Polars one; deferred until profiling proves the Polars path inadequate.
 - **Recorded alternative.**
-  - Numba / cython kernel — rejected for Layer 1 (build complexity).
+  - Numba / cython kernel — rejected for this iteration (build complexity).
   - Naive Python loop — rejected (too slow on the real dataset).
   - Pandas + `numpy` broadcasting — would work but contradicts the
     CLAUDE.md Polars convention; rejected.
@@ -936,10 +924,10 @@ first line of the decision body, not in the status field.
 - **Note.** This entry promotes the previously un-numbered "Loader casts to
   OHLCV_SCHEMA" preamble block into a proper numbered decision.
 
-## D-035 — Layer-1 tooling stack
+## D-035 — Tooling stack (this iteration)
 
 - **Date:** 2026-05-21 — **Phase:** A — **Status:** Accepted
-- **Decision.** The Layer-1 tooling stack is fixed at the start of Phase A:
+- **Decision.** The tooling stack for this iteration is fixed at the start of Phase A:
   - **Package manager:** `uv` (fast, lockfile-backed, native ARM)
   - **Python:** 3.12 (latest broadly supported on ARM)
   - **DataFrames:** `polars` for I/O and preprocessing; `pandas` only at the
@@ -956,11 +944,11 @@ first line of the decision body, not in the status field.
 - **Verdict.** New (consolidates the un-numbered "Tooling choices" preamble
   from earlier commits into a single numbered decision).
 - **Rationale.** The combination is M-series-friendly (`uv` and native-ARM
-  packages), keeps Layer-1 setup to a single command (`uv sync`), and avoids
+  packages), keeps this iteration's setup to a single command (`uv sync`), and avoids
   ops complexity (file-backed MLflow, no server). Polars is the explicit
   learning objective for I/O; pandas survives only at boundaries that
   require it.
 - **Recorded alternative.** `pip` + `requirements.txt` with pandas everywhere
   — rejected: slower setup, no native lockfile, misses the Polars learning
-  goal. A managed MLflow server would add ops surface without Layer-1
-  benefit; rejected for now.
+  goal. A managed MLflow server would add ops surface without enough
+  benefit to justify it in this iteration; rejected for now.

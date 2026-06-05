@@ -61,7 +61,7 @@ def attach_patr(
 ) -> pl.DataFrame:
     """Return df15 with patr_<tf> columns attached, one per requested timeframe.
 
-    For each timeframe `tf` in `timeframes_minutes`, computes proportional ATR
+    For each timeframe `tf` in `timeframes_minutes`, computes percent ATR (pATR)
     via Wilder smoothing (window=10), directional true range via the `up_first`
     flag derived from 1m sub-candles within each tf bar, then as-of joins onto
     the 15m clock. Higher-timeframe pATR series are lagged by v1's `shift(3)`
@@ -561,7 +561,7 @@ output exists. They are now fixed.
   including the new entries for entry price (D-027), intra-bar tie-break (D-028),
   `LabelResult` schema (D-029), module layout (D-030), pATR module location
   (D-031), and forward-walk vectorization (D-033); status updates on D-008
-  (pinned values), D-010 (concrete sizing), D-015 (out of scope for Layer 1),
+  (pinned values), D-010 (concrete sizing), D-015 (out of scope for this iteration),
   and D-016 (scheme value reserved)
 - LEARNINGS.md updated with the target diagnostics, the same-bar ambiguity rate
   at both grains, the Q4 `shift(3)` verdict from B.0, and the embargo
@@ -582,8 +582,8 @@ output exists. They are now fixed.
 - No scalers fit (Phase D, per-fold only)
 - No model, no training, no thresholds tuned against test (Phase C/E)
 - No feature selection (Phase D)
-- **No CUSUM event filter (D-015).** Out of scope for Layer 1; honest-arm
-  cadence stays at every 15m close (D-002). Revisit in Layer 2 if the
+- **No CUSUM event filter (D-015).** Out of scope for this iteration; honest-arm
+  cadence stays at every 15m close (D-002). Revisit in a follow-on iteration if the
   base-rate / overlap diagnostics in B.2 motivate it.
 - **No CPCV implementation in Phase B (D-016).** The `cpcv` scheme value is
   reserved in `make_walkforward_folds` so Phase C consumers don't reshape the

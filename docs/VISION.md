@@ -25,8 +25,9 @@ predict, at a hit-rate above the payoff-implied breakeven (≈38.5% pre-cost for
 inherited from v1 (≈5.3 days) — by a margin that survives honest evaluation,
 label-overlap-aware confidence intervals, and transaction costs.
 
-`pATR` = period ATR as used in v1; the precise window and computation are
-reproduced in Phase B.
+`pATR` = **percent ATR** — a price-normalized (ratio) form of the Average
+True Range, scale-invariant across price regimes. The precise definition and
+computation are locked in D-012 and implemented in Phase B (B.0).
 
 The target is the v1 three-class scheme (`-1` short / `0` no-touch / `+1` long),
 collapsed to a directional signal for headline reporting.
@@ -41,7 +42,7 @@ Whether the hypothesis holds under honest evaluation is the central question of 
 
 ## Why this project
 
-In goals:
+In ambitions:
 
 1. **Learn.** Time-series cross-validation, financial evaluation, MLOps tooling.
 2. **Research.** Find out what's actually true about the v1 hypothesis.
@@ -51,7 +52,7 @@ In goals:
    paper-trades.
    No Django, no Celery, no DB wipes.
 
-Each goal is a coherent checkpoint. The project succeeds at any goal.
+Each ambition is a coherent checkpoint. The project succeeds at any ambition.
 
 ## North star principles
 
@@ -67,7 +68,7 @@ The gap between the v1-faithful arm and the honest arm is itself a finding — s
 Concretely, the honest arm differs from the v1-faithful arm in (at minimum): purged/embargoed walk-forward, no future-looking feature engineering, label-overlap-aware confidence intervals, and post-cost evaluation.
 The v1-faithful arm intentionally retains v1's choices on each.
 - **A null result is a successful outcome.**
-If no edge survives honest evaluation, that finding — documented with the methodology trail that produced it — fulfills the research goal.
+If no edge survives honest evaluation, that finding — documented with the methodology trail that produced it — fulfills the research ambition.
 This is the most important guard against motivated reasoning.
 - **Depth over breadth.**
 One model rebuilt properly, evaluated rigorously, fully understood.
@@ -81,7 +82,7 @@ Hyperparameter search, exotic architectures, and infrastructure theater do not.
 
 ## Scope
 
-**In scope (Goals 1–3):**
+**In scope (Ambitions 1–3):**
 
 - BTC/USDT only
 - 4h / 1h / 15m / 1m timeframes
@@ -91,7 +92,7 @@ Hyperparameter search, exotic architectures, and infrastructure theater do not.
 - Comparison against baselines (buy-and-hold, naive direction, simple TA rule,
   frequency-matched random signal)
 
-**Explicitly out of scope (Goals 1–3):**
+**Explicitly out of scope (Ambitions 1–3):**
 
 - Other assets (the v1 lists 8 — they wait for later)
 - Hyperparameter optimization beyond a sane manual sweep
@@ -106,9 +107,9 @@ Hyperparameter search, exotic architectures, and infrastructure theater do not.
 - Transaction-cost model (fee assumption, slippage model, spread treatment) — set before honest-arm evaluation; sensitivity reported.
 - Pre-registered "meaningful edge" threshold — set before any honest-arm metrics are computed.
 
-## Definition of done (Goals 1–3)
+## Definition of done (Ambitions 1–3)
 
-Per-goal DoDs live in `PLAN.md`. The list below covers Goals 1–3 of the *Why this project* section — the optional live system (Goal 4) has its own DoD if it's pursued.
+Per-ambition DoDs live in `PLAN.md`. The list below covers Ambitions 1–3 of the *Why this project* section — the optional live system (Ambition 4) has its own DoD if it's pursued.
 
 A repo containing:
 

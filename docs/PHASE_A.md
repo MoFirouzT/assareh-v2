@@ -55,7 +55,7 @@ assareh-v2/ (repo root)
 - Dataframes: Polars for I/O and preprocessing; pandas at the sklearn/torch
   and pandas-ta boundary only
 - Config: `pydantic-settings` (typed, env-aware)
-- Experiment tracking: MLflow with local file backend (no server in Layer 1)
+- Experiment tracking: MLflow with local file backend (no server in this iteration)
 - Testing: pytest
 - Linting: ruff
 - Type checking: mypy (gradual, not strict yet)

@@ -1,14 +1,23 @@
-# Assareh-v2 — Layer 1 Plan
+# Assareh-v2 — Plan (Ambitions 1–3)
 
-This document covers Layer 1: the research + learning phase.
-Layer 2 (ML engineering polish) and Layer 3 (optional live system) are planned later, once
-Layer 1 produces results worth engineering around.
+This document covers the current iteration of work — fulfilling
+**Ambitions 1–3** from `VISION.md` (Learn, Research, ML engineering signal).
+**Ambition 4** (the optional live system) and any further engineering polish
+beyond what ships here are planned later, once this iteration produces
+results worth engineering around.
+
+> **Companion docs.** `VISION.md` for the why and the definition of done;
+> `DECISIONS.md` for every governing choice (cited inline as `D-NNN`);
+> `LEARNINGS.md` for findings and dead ends; **`GLOSSARY.md` for project
+> terminology — `pATR`, `embargo`, `rt3` / `target3` / `stop2`,
+> walk-forward CV, etc.** Definitions live in the glossary; verdicts live in
+> `DECISIONS.md`; this plan cross-references both.
 
 ---
 
 ## Dual-arm methodology (cross-cutting)
 
-The single most important methodological commitment in Layer 1, applied from
+The single most important methodological commitment in this iteration, applied from
 Phase B onward.
 Every place where v1 made a choice that we want to improve on, we keep **both**:
 
@@ -99,11 +108,11 @@ evaluation-harness skeleton *before* writing any model.
   layout, pATR module location, `label_spans` representation, forward-walk
   vectorization)
 
-**Out of scope for Layer 1:** CUSUM event filter (D-015 — Rejected; revisit
-in Layer 2). CPCV implementation lands in Phase C (D-016).
+**Out of scope for this iteration:** CUSUM event filter (D-015 — Rejected; revisit
+in a follow-on iteration). CPCV implementation lands in Phase C (D-016).
 
 **Learning component:** ~8 hours reading López de Prado **chapters 3 (labeling), 4 (sample weights / uniqueness), and 7 (cross-validation in finance)** before implementing, plus a skim of **chapters 11–12 (backtest overfitting, CSCV/PBO, Deflated Sharpe Ratio)** to inform the success threshold and reporting.
-This is the most important learning investment in Layer 1.
+This is the most important learning investment in this iteration.
 
 See `PHASE_B.md` for the full breakdown.
 
@@ -203,7 +212,7 @@ pre-registered in Phase B.
 
 ## Phase F — Synthesis and write-up
 
-**Goal:** Lock in findings, polish the repo, ship Layer 1.
+**Goal:** Lock in findings, polish the repo, ship this iteration.
 
 **Key deliverables:**
 
@@ -212,8 +221,8 @@ pre-registered in Phase B.
 - A `notebooks/results.ipynb` with the final comparison plots and analysis,
   including the honest-vs-v1-faithful gap
 - `make reproduce` or equivalent: one command that runs the whole pipeline
-- Repo cleaned up, dead code removed, tests passing, CI green (if Layer 2 not
-  yet started, basic GitHub Actions running tests is fine)
+- Repo cleaned up, dead code removed, tests passing, CI green (if no follow-on
+  iteration is yet started, basic GitHub Actions running tests is fine)
 
 ---
 
@@ -223,7 +232,7 @@ pre-registered in Phase B.
 
 **When to do this:** only if Phase E produces interesting results *and* you're
 still curious. Skip if the model fails honestly — there's nothing to ablate.
-This is also an excellent Layer 2 candidate, since by then re-running
+This is also an excellent follow-on-iteration candidate, since by then re-running
 experiments is cheap.
 
 **Key deliverables:**
@@ -249,8 +258,8 @@ experiments is cheap.
 ## What lives where
 
 - `VISION.md` — this file's sibling. Rarely changes.
-- `PLAN.md` — this file. Updated when scope changes; superseded by Layer 2/3
-  plans when Layer 1 completes.
+- `PLAN.md` — this file. Updated when scope changes; superseded by
+  follow-on-iteration plans when this iteration completes.
 - `PHASE_A.md`, `PHASE_B.md`, … — per-phase breakdowns, written just ahead of
   starting each phase.
 - `DECISIONS.md` — append-only log of design decisions. Updated in the same
