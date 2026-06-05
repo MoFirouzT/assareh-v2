@@ -1,7 +1,7 @@
 # Assareh-v2 — Plan (Ambitions 1–3)
 
 This document covers the current iteration of work — fulfilling
-**Ambitions 1–3** from `VISION.md` (Learn, Research, ML engineering signal).
+**Ambitions 1–3** from `VISION.md` (Learn, Honest verdict, ML engineering signal).
 **Ambition 4** (the optional live system) and any further engineering polish
 beyond what ships here are planned later, once this iteration produces
 results worth engineering around.

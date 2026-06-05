@@ -8,8 +8,9 @@ this file just says "X is Y." When a glossary entry is governed by a
 decision, it cross-references the relevant `D-NNN`.
 
 Scope of this initial version: triple-barrier labelling, the pATR family,
-and evaluation/sample geometry. Project-arms vocabulary (`v1-faithful arm`,
-`honest arm`, etc.) and v1 artifact names will be added in a later pass.
+a short trading-economics primer, and evaluation/sample geometry.
+Project-arms vocabulary (`v1-faithful arm`, `honest arm`, etc.) and v1
+artifact names will be added in a later pass.
 
 ## Index
 
@@ -30,6 +31,15 @@ and evaluation/sample geometry. Project-arms vocabulary (`v1-faithful arm`,
 [pTR](#ptr-percent-true-range) ·
 [`shift(3)` lag](#shift3-lag) ·
 [Wilder smoothing](#wilder-smoothing)
+
+**Trading economics primer.**
+[Deflated Sharpe Ratio](#deflated-sharpe-ratio-dsr) ·
+[Drawdown](#drawdown) ·
+[Payoff](#payoff) ·
+[Sharpe ratio](#sharpe-ratio) ·
+[Slippage](#slippage) ·
+[Sortino ratio](#sortino-ratio) ·
+[Transaction cost](#transaction-cost-taker--maker-fee)
 
 **Evaluation & sample geometry.**
 [Average uniqueness](#average-uniqueness--label-overlap) ·
@@ -196,6 +206,99 @@ bleed — the guarantee is that no row of the 15m frame sees a
 higher-timeframe pATR value that depends on data from after that row's
 timestamp. v1 design, preserved in **D-012**; exact mechanics of "3 bars of
 which clock" are pending Q4 of PHASE_B.B.0.
+
+---
+
+## Trading economics primer
+
+### Payoff
+
+The amount a trade gains (positive) or loses (negative) per unit, expressed
+in some common scale. For this project the natural unit is multiples of pATR:
+a trade that hits the +4 × pATR profit barrier has payoff +4; one stopped out
+at −2.5 × pATR has payoff −2.5. **"Payoff-implied"** anywhere in the docs
+means *derived from the structural reward and risk of the trade design*, not
+from realized P&L on backtest data.
+
+### Drawdown
+
+The peak-to-trough decline in cumulative P&L (or equity) over some window.
+**Max drawdown** is the largest such decline observed across the backtest —
+the worst stretch of consecutive losses. Reported as a percent of the prior
+peak. A 30% max drawdown means: at some point in the backtest, the strategy
+gave back 30% of its previous high before recovering (or before the backtest
+ended). Critical because two strategies with the same average return can have
+wildly different drawdown profiles, and the one with worse drawdown is
+operationally harder to deploy — investors and the trader alike abandon
+strategies in deep drawdown even when they remain positive in expectation.
+Listed as a Phase C metric.
+
+### Slippage
+
+The difference between the price assumed for a trade in backtest (e.g., the
+bar's close) and the price the trade would actually fill at on a live
+exchange. Three sources:
+
+- **Order-book depth** — the order eats through the visible book and moves
+  the price as it fills.
+- **Latency** — the price moves between the model's decision and the fill.
+- **Bid–ask spread** — crossed on entry and again on exit.
+
+v2 models slippage as a per-trade cushion conservatively sized to sub-1m
+touch ambiguity; the exact form is locked when D-011's cost model is fixed
+in Phase C.
+
+### Transaction cost (taker / maker fee)
+
+The fee an exchange charges to execute a trade. **Taker fees** apply when the
+order crosses the book — a market order, or a limit order that fills
+immediately — because it "takes" liquidity that was already posted.
+**Maker fees** apply when the order is a passive limit that rests in the
+book until someone else fills it — it "makes" liquidity. Maker fees are
+lower (sometimes zero or even a negative rebate); taker fees are higher
+(typically 5–10 bps on spot exchanges). This project assumes **taker pricing
+throughout** — decisions fire at bar close, which is operationally a
+market-like order, not a passive resting one.
+
+### Sharpe ratio
+
+The standard risk-adjusted return metric. Mean excess return divided by the
+standard deviation of returns, annualized:
+
+```
+Sharpe = (mean_return − risk_free_rate) / std(returns) × √(periods_per_year)
+```
+
+Interpreted as "how much return per unit of return-volatility." Rule of
+thumb for trading strategies (annualized, net of costs): > 1 is good, > 2 is
+excellent, > 3 deserves suspicion — strategies advertising Sharpe > 3 are
+usually overfit, leveraged, or measured over too-short a window.
+
+### Sortino ratio
+
+A Sharpe variant that penalizes only **downside** volatility. The denominator
+is the standard deviation of returns *below a target* (commonly zero or the
+risk-free rate) instead of all returns:
+
+```
+Sortino = (mean_return − target) / std(returns_below_target) × √(periods_per_year)
+```
+
+Useful when returns are asymmetric, because Sharpe punishes a strategy for
+upside volatility — which is rarely what an investor actually wants.
+Strategies with asymmetric payoff profiles (like this project's 4 : 2.5
+reward : risk) typically have higher Sortino than Sharpe.
+
+### Deflated Sharpe Ratio (DSR)
+
+A Sharpe-ratio adjustment for **multiple-testing inflation** — the fact that
+the best Sharpe out of *N* tried configurations is biased upward by
+selection even when none of the configurations actually have an edge. From
+López de Prado, AFML Ch. 14. DSR estimates the *probability that the true
+Sharpe exceeds a benchmark*, given the number of trials, the variance and
+skew of the realized returns, and the empirical Sharpe observed. Functions
+as the headline "is this Sharpe trustworthy?" number. **D-008** requires
+`DSR > 0.95` as part of the project's pre-registered success threshold.
 
 ---
 

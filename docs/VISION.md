@@ -2,41 +2,32 @@
 
 ## What this project is
 
-Assareh-v2 is a methodology-focused portfolio project: a second attempt at
-predicting Bitcoin price-direction using a **path-dependent triple-barrier
-target** (does price hit a profit level before a stop level, within a horizon?)
+Assareh-v2 is a methodology-focused portfolio project:
+a second attempt at predicting Bitcoin price-direction using a **path-dependent triple-barrier target**
+(does price hit a profit level before a stop level, within a horizon?)
 and **multi-timeframe inputs** (4h / 1h / 15m / 1m).
 
-The deliverable is a reproducible research pipeline, a walk-forward backtest
-harness, and an evaluation report comparing a v1-faithful arm against an
-honest arm — with the gap between them treated as a finding.
+The deliverable is a reproducible research pipeline, a walk-forward backtest harness, and an evaluation report comparing a v1-faithful arm against an honest arm — with the gap between them treated as a finding.
 
-The starting point is an earlier iteration of Assareh ("v1") — a research
-pipeline, a Django/Celery production service, and reported accuracy results.
-This restart builds on v1's ideas and treats those results as **hypotheses to
-validate** rather than baselines to reproduce.
+The starting point is an earlier iteration of Assareh ("v1") —
+a research pipeline, a Django/Celery production service, and reported accuracy results.
+This restart builds on v1's ideas and treats those results as **hypotheses to validate** rather than baselines to reproduce.
 
 ## Core hypothesis
 
-Whether a model trained on technical indicators across multiple timeframes can
-predict, at a hit-rate above the payoff-implied breakeven (≈38.5% pre-cost for a
-4 : 2.5 reward:risk), whether BTC will hit a 4×pATR profit target before a
-2.5×pATR stop-loss within a horizon of ~510 bars at the 15m decision cadence
-inherited from v1 (≈5.3 days) — by a margin that survives honest evaluation,
-label-overlap-aware confidence intervals, and transaction costs.
+Whether a model trained on technical indicators across multiple timeframes can predict, at a hit-rate above the payoff-implied breakeven
+(≈38.5% pre-cost for a 4 : 2.5 reward:risk),
+whether BTC will hit a 4×pATR profit target before a 2.5×pATR stop-loss within a horizon of ~510 bars at the 15m decision cadence inherited from v1 (≈5.3 days) —
+by a margin that survives honest evaluation, label-overlap-aware confidence intervals, and transaction costs.
 
-`pATR` = **percent ATR** — a price-normalized (ratio) form of the Average
-True Range, scale-invariant across price regimes. The precise definition and
-computation are locked in D-012 and implemented in Phase B (B.0).
+`pATR` = **percent ATR** —
+a price-normalized (ratio) form of the Average True Range, scale-invariant across price regimes.
+The precise definition and computation are locked in D-012 and implemented in Phase B (B.0).
 
-The target is the v1 three-class scheme (`-1` short / `0` no-touch / `+1` long),
-collapsed to a directional signal for headline reporting.
+The target is the v1 three-class scheme (`-1` short / `0` no-touch / `+1` long), collapsed to a directional signal for headline reporting.
 
-The specific "meaningful edge" threshold (effect size, CI width, post-cost
-adjustment) will be **fixed and recorded in `DECISIONS.md` before any honest-arm
-metrics are computed**, to prevent post-hoc target adjustment.
-Until then, the honest answer to "how much better than baseline counts as success?"
-is: *we will decide, on the record, before we know*.
+The specific "meaningful edge" threshold (effect size, confidence-interval (CI) width, post-cost adjustment) will be **fixed and recorded in `DECISIONS.md` before any honest-arm metrics are computed**, to prevent post-hoc target adjustment.
+Until then, the honest answer to "how much better than baseline counts as success?" is: *we will decide, on the record, before we know*.
 
 Whether the hypothesis holds under honest evaluation is the central question of the project.
 
@@ -45,7 +36,9 @@ Whether the hypothesis holds under honest evaluation is the central question of 
 In ambitions:
 
 1. **Learn.** Time-series cross-validation, financial evaluation, MLOps tooling.
-2. **Research.** Find out what's actually true about the v1 hypothesis.
+2. **Honest verdict.** Reach a methodologically defended answer on whether the v1 design has a real edge under leakage-aware evaluation.
+   Where evidence shows a v1 choice is a problem, improve it; where evidence is silent, defer to v1's design.
+   The methodology trail underwrites both the verdict and any improvements.
 3. **ML engineering signal.** Produce a codebase a senior engineer would respect
    — typed config, walk-forward backtest harness, tests, reproducibility, CI.
 4. **(Optional) Live system.** If results justify it, a lean inference loop that
@@ -68,7 +61,7 @@ The gap between the v1-faithful arm and the honest arm is itself a finding — s
 Concretely, the honest arm differs from the v1-faithful arm in (at minimum): purged/embargoed walk-forward, no future-looking feature engineering, label-overlap-aware confidence intervals, and post-cost evaluation.
 The v1-faithful arm intentionally retains v1's choices on each.
 - **A null result is a successful outcome.**
-If no edge survives honest evaluation, that finding — documented with the methodology trail that produced it — fulfills the research ambition.
+If no edge survives honest evaluation, that finding — documented with the methodology trail that produced it — fulfills the honest-verdict ambition.
 This is the most important guard against motivated reasoning.
 - **Depth over breadth.**
 One model rebuilt properly, evaluated rigorously, fully understood.
