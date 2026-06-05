@@ -2,30 +2,46 @@
 
 ## What this project is
 
-A restart of an earlier exploration into Bitcoin price-direction prediction using
-a **path-dependent triple-barrier target** (does price hit a profit level before a
-stop level, within a horizon?) and **multi-timeframe inputs** (4h / 1h / 15m / 1m).
+Assareh-v2 is a methodology-focused portfolio project: a second attempt at
+predicting Bitcoin price-direction using a **path-dependent triple-barrier
+target** (does price hit a profit level before a stop level, within a horizon?)
+and **multi-timeframe inputs** (4h / 1h / 15m / 1m).
 
-The earlier iteration of Assareh produced a working research pipeline, a
-production Django/Celery service, and promising-looking accuracy numbers.
-This restart builds on those ideas with sharper methodology, modern tooling, and
-rigorous evaluation — and treats prior results as **hypotheses to validate**
-rather than baselines to reproduce.
+The deliverable is a reproducible research pipeline, a walk-forward backtest
+harness, and an evaluation report comparing a v1-faithful arm against an
+honest arm — with the gap between them treated as a finding.
+
+The starting point is an earlier iteration of Assareh ("v1") — a research
+pipeline, a Django/Celery production service, and reported accuracy results.
+This restart builds on v1's ideas and treats those results as **hypotheses to
+validate** rather than baselines to reproduce.
 
 ## Core hypothesis
 
-A model trained on technical indicators across multiple timeframes can predict,
-better than naive baselines, whether BTC will hit a 4×pATR profit target before
-a 2.5×pATR stop-loss within a defined horizon (~5.3 days at the 15m decision
-cadence inherited from v1).
+Whether a model trained on technical indicators across multiple timeframes can
+predict, at a hit-rate above the payoff-implied breakeven (≈38.5% pre-cost for a
+4 : 2.5 reward:risk), whether BTC will hit a 4×pATR profit target before a
+2.5×pATR stop-loss within a horizon of ~510 bars at the 15m decision cadence
+inherited from v1 (≈5.3 days) — by a margin that survives honest evaluation,
+label-overlap-aware confidence intervals, and transaction costs.
+
+`pATR` = period ATR as used in v1; the precise window and computation are
+reproduced in Phase B.
 
 The target is the v1 three-class scheme (`-1` short / `0` no-touch / `+1` long),
 collapsed to a directional signal for headline reporting.
+
+The specific "meaningful edge" threshold (effect size, CI width, post-cost
+adjustment) will be **fixed and recorded in `DECISIONS.md` before any honest-arm
+metrics are computed**, to prevent post-hoc target adjustment.
+Until then, the honest answer to "how much better than baseline counts as success?"
+is: *we will decide, on the record, before we know*.
+
 Whether the hypothesis holds under honest evaluation is the central question of the project.
 
 ## Why this project
 
-In layers:
+In goals:
 
 1. **Learn.** Time-series cross-validation, financial evaluation, MLOps tooling.
 2. **Research.** Find out what's actually true about the v1 hypothesis.
@@ -35,7 +51,7 @@ In layers:
    paper-trades.
    No Django, no Celery, no DB wipes.
 
-Each layer is a coherent checkpoint. The project succeeds at any layer.
+Each goal is a coherent checkpoint. The project succeeds at any goal.
 
 ## North star principles
 
@@ -48,10 +64,15 @@ Every meaningful v1 choice is preserved as a runnable **comparison arm**.
 The project's improvements form the **primary arm**.
 Where the two cannot coexist, the primary arm wins and the v1 alternative is recorded (and, where it isolates a leak, run deliberately to *measure* the inflation).
 The gap between the v1-faithful arm and the honest arm is itself a finding — see "Dual-arm methodology" in `PLAN.md`.
+Concretely, the honest arm differs from the v1-faithful arm in (at minimum): purged/embargoed walk-forward, no future-looking feature engineering, label-overlap-aware confidence intervals, and post-cost evaluation.
+The v1-faithful arm intentionally retains v1's choices on each.
+- **A null result is a successful outcome.**
+If no edge survives honest evaluation, that finding — documented with the methodology trail that produced it — fulfills the research goal.
+This is the most important guard against motivated reasoning.
 - **Depth over breadth.**
 One model rebuilt properly, evaluated rigorously, fully understood.
 Ablations are optional, not central.
-Other models and/or paradigms tried only with justification.
+Alternate architectures require a written rationale in `DECISIONS.md` before work starts.
 - **80/20 throughout — except where it kills credibility.**
 Backtest design, split discipline, label-overlap handling, and leakage prevention get full rigor.
 Hyperparameter search, exotic architectures, and infrastructure theater do not.
@@ -60,7 +81,7 @@ Hyperparameter search, exotic architectures, and infrastructure theater do not.
 
 ## Scope
 
-**In scope (Layer 1):**
+**In scope (Goals 1–3):**
 
 - BTC/USDT only
 - 4h / 1h / 15m / 1m timeframes
@@ -70,7 +91,7 @@ Hyperparameter search, exotic architectures, and infrastructure theater do not.
 - Comparison against baselines (buy-and-hold, naive direction, simple TA rule,
   frequency-matched random signal)
 
-**Explicitly out of scope (Layer 1):**
+**Explicitly out of scope (Goals 1–3):**
 
 - Other assets (the v1 lists 8 — they wait for later)
 - Hyperparameter optimization beyond a sane manual sweep
@@ -79,7 +100,15 @@ Hyperparameter search, exotic architectures, and infrastructure theater do not.
 - Any deployment or production concerns
 - The full v1 ablation study (E0–E6) — optional stretch in Phase X
 
-## Definition of done for Layer 1
+**Deferred decisions (recorded in `DECISIONS.md` when made):**
+
+- Held-out test window — set before honest-arm evaluation.
+- Transaction-cost model (fee assumption, slippage model, spread treatment) — set before honest-arm evaluation; sensitivity reported.
+- Pre-registered "meaningful edge" threshold — set before any honest-arm metrics are computed.
+
+## Definition of done (Goals 1–3)
+
+Per-goal DoDs live in `PLAN.md`. The list below covers Goals 1–3 of the *Why this project* section — the optional live system (Goal 4) has its own DoD if it's pursued.
 
 A repo containing:
 
@@ -94,7 +123,8 @@ A repo containing:
 5. `DECISIONS.md` capturing every meaningful choice, its rationale, and the
    recorded v1 alternative.
 6. `LEARNINGS.md` capturing what was discovered along the way — including the
-   measured gap between the v1-faithful and honest arms.
+   measured gap between the v1-faithful and honest arms, broken down by which
+   methodological discipline closes which portion of it.
 7. A `README.md` that explains the project, the findings, and how to reproduce
    them.
 
