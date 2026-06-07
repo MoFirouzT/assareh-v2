@@ -511,12 +511,7 @@ met; the entries below tick them off explicitly.
 
 ## A.5 — v1 data-handling comparison (closed 2026-06-05)
 
-The v1-vs-v2 data-handling comparison that A.4 flagged as a follow-up
-landed here. Methodology: a self-contained audit prompt was handed to a
-separate Claude session with read access to the v1 repo; the session
-returned a row-per-anomaly report covering 21 numbered anomalies plus
-four cross-cutting findings, each with `path/file.py:LINE` citations into
-the v1 codebase.
+Note: `path/file.py:LINE` is the citation into the v1 codebase.
 
 **Findings appended to LEARNINGS.md** (each entry includes v1 code
 citations and the implication for the affected v2 phase):

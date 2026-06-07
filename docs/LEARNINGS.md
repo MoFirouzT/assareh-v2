@@ -194,24 +194,19 @@ This reasoning is captured as a design decision in **D-026**.
 
 ## L-008 — v1's default gap interpolation is non-causal and contaminates labels
 
-**Discovered:** v1 data-handling audit (handed off to a Claude session with v1 repo access)
+**Discovered:** v1 data-handling audit.
 **Affected:** every gap-crossing label in v1's training window (2017-08-28 onward), all four timeframes
 
 v1's `BtcPreprocessor` runs `LinearInterpolator` on each timeframe before
-anything else touches the data. When a bar is missing,
-`LinearInterpolator._estimate_ohlcv_and_insert_the_candles` synthesizes the
-missing OHLCV by a **weighted average of the previous and the next available
-bar** — non-causal. A causal alternative
-(`_causal_estimate_ohlcv_and_insert_the_candles`) exists but is not the
-default path; the bar-repeating `ZeroOrderHold` class is also available but
-not used by `BtcPreprocessor`.
+anything else touches the data.
+When a bar is missing, `LinearInterpolator._estimate_ohlcv_and_insert_the_candles` synthesizes the missing OHLCV by a **weighted average of the previous and the next available bar** — non-causal.
+A causal alternative (`_causal_estimate_ohlcv_and_insert_the_candles`) exists but is not the default path.
+The bar-repeating `ZeroOrderHold` class is also available but not used by `BtcPreprocessor`.
 
 The synthesized bars then flow into `TargetExtractor.detect_reversals`,
 which walks forward through `temp_df.high` and `temp_df.low` to decide
-which barrier is touched first. Whenever the forward walk crosses a
-synthesized bar, the high/low it reads is a function of the *next real*
-bar's OHLC — i.e., the label's resolution is informed by data outside its
-causal window.
+which barrier is touched first.
+Whenever the forward walk crosses a synthesized bar, the high/low it reads is a function of the *next real* bar's OHLC — i.e., the label's resolution is informed by data outside its causal window.
 
 **v1 code references:**
 
@@ -223,15 +218,14 @@ causal window.
 - `TargetExtractor.detect_reversals` (consumer) — v1: `:710`
 - Causal alternative (default off) — v1: `:386-394`
 
-**Scale of impact.** v1's training window starts 2017-08-28
-(`0_Preprocessing.ipynb`, `first_day='2017-08-28 16:00:00'`); v2's L-002
-records 34 gaps in the 1m series, the largest 33.5 h around 2018-02-08–09.
-Every gap is synthesized in v1, then walked by every label whose horizon
-spans it. The 511-bar (~5.3-day) horizon is wider than every observed gap
-except the largest, so essentially every label issued within ~5 days of a
-maintenance gap is contaminated.
+**Scale of impact.**
+v1's training window starts 2017-08-28 (`0_Preprocessing.ipynb`, `first_day='2017-08-28 16:00:00'`);
+v2's L-002 records 34 gaps in the 1m series, the largest 33.5 h around 2018-02-08–09.
+Every gap is synthesized in v1, then walked by every label whose horizon spans it.
+The 511-bar (~5.3-day) horizon is wider than every observed gap except the largest, so essentially every label issued within ~5 days of a maintenance gap is contaminated.
 
-**Implication for v2 Phase B.** The dual-arm framework requires both:
+**Implication for v2 Phase B.**
+The dual-arm framework requires both:
 
 - *v1-faithful arm* — reproduce the non-causal weighted interpolation
   before label construction, so v1's reported numbers are reproducible.
@@ -239,16 +233,14 @@ maintenance gap is contaminated.
   cross an unfilled gap return a typed-null label (no decision) for that
   sample.
 
-The gap between the two arms quantifies how much of v1's apparent labeling
-edge comes from synthesized future leaking into the target. This is the
-primary candidate for a new leakage-probe DECISIONS.md entry
+The gap between the two arms quantifies how much of v1's apparent labeling edge comes from synthesized future leaking into the target.
+This is the primary candidate for a new leakage-probe DECISIONS.md entry
 (D-036, to follow).
 
-**Implication for v2 Phase D.** The same interpolated series is the input
-to every TA indicator (ATR, BB, Donchian, momentum). Any indicator whose
-lookback window crosses a synthesized bar in v1 reads future-informed
-values, so the leakage compounds on the feature side as well — the
-gap-fill discipline arm is a feature-and-label probe, not a label-only one.
+**Implication for v2 Phase D.**
+The same interpolated series is the input to every TA indicator (ATR, BB, Donchian, momentum).
+Any indicator whose lookback window crosses a synthesized bar in v1 reads future-informed values, so the leakage compounds on the feature side as well —
+the gap-fill discipline arm is a feature-and-label probe, not a label-only one.
 
 ---
 
