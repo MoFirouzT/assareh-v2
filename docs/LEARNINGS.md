@@ -544,3 +544,40 @@ them as surprises.
   honest-arm guard has no v1 counterpart), v1 has no archive
   integrity verification (#18), and v1 fetches from a single source
   with no cross-verification (#21). These are v2-only disciplines.
+
+---
+
+## L-016 — Binance Vision CSVs use mixed timestamp encodings
+
+**Discovered:** Phase A.2 — downloader implementation
+
+Binance Vision klines archives do not use a single fixed timestamp encoding
+across the dataset. Some files encode `open_time` / `close_time` as 13-digit
+milliseconds; others use 16-digit microseconds; a small set of edge cases
+use 10-digit seconds. Pinning the parser to `unit='ms'` would silently
+corrupt every microsecond-encoded row by misinterpreting its scale by a
+factor of ~31,556 (epoch 2010-01-01 in `ms` becomes year 41,950 if read as
+`us`, etc.) — no exception, just plausible-looking but wildly wrong dates.
+
+**Resolution.** The downloader's
+`_parse_vision_csv._to_datetime_series`
+(scripts/data_downloader.py:134-167) detects encoding by numeric range,
+column-wide:
+
+- `[1.26e12, 3.25e13]` → milliseconds
+- `[1.26e15, 3.25e16]` → microseconds
+- `[1.26e9,  3.25e10]` → seconds
+
+Each range spans roughly 2010 → year 3000, the three are non-overlapping,
+and the check uses `.between(...).all()` because a single Vision CSV
+always uses one consistent encoding for the whole file. The parser tries
+ms first, then us, then s; a fall-through tries `unit='ms'` one more time
+and raises with a 10-value sample if even that fails. The ccxt path is
+unaffected — `ccxt.fetch_ohlcv` always returns milliseconds and is
+documented as such (scripts/data_downloader.py:378).
+
+**Implication.** No silent corruption on historical back-fills regardless
+of which encoding Binance happened to publish for a given archive. The
+guard is local to Vision CSV parsing; no downstream code needs to be aware
+of it, because `OHLCV_SCHEMA` pins the final dtype at the loader boundary
+(D-034).

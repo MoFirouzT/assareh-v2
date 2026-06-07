@@ -634,7 +634,7 @@ Pinned values, before any model is fit:
 | `K` (pass folds)  | **5** (60% pass rate)       | this phase          |
 | DSR confidence    | **0.95**                    | default             |
 | PBO ceiling       | **0.2**                     | default             |
-| `V` source        | **trial-set estimator**: variance of Sharpe across `folds × probe arms × baselines`. Probe arms span the full catalogue (5 statistical-discipline + 4 data-handling) per Phase C `evaluate()`'s `arm` parameter; all logged to MLflow | D-008 added detail (option b); D-036–D-039 expansion |
+| `V` source        | **trial-set estimator**: variance of Sharpe across `folds × dual-arm configurations × baselines`. Dual-arm configurations cover the full catalogue per Phase C `evaluate()`'s `arm` parameter (8 leakage probes + 2 retained comparison arms); all logged to MLflow | D-008 added detail (option b); D-036–D-039 expansion |
 
 The `V` source is the trial-set estimator (not reduced CPCV), because
 pre-registration must complete at the end of Phase B and the CPCV path

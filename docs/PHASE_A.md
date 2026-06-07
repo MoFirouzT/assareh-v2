@@ -281,63 +281,56 @@ monthly ZIP archives from `data.binance.vision` for history, daily
 ZIP archives for the current month, and `ccxt` as the tail filler for the most recent bars not yet archived.
 It also cross-verifies ccxt data against binance data on the overlap before appending.
 
-### Required modifications of `BinanceDownloader` class before use
+### What the downloader does
 
-1. **Output format → Parquet, not CSV.**
-   - `_get_file_path`: return `.parquet` instead of `.csv`
-   - `download` / `update` / `update_with_ccxt`:
-     `to_parquet(path, compression='zstd')`
-   - `load`: read with Parquet;
-    the downloader stays pandas internally and writes Parquet for the Polars loader (A.3) to consume.
+The contract `BinanceDownloader` (in `scripts/data_downloader.py`) exposes to
+the rest of the project. Each guarantee points at the decision or learning
+that governs it.
 
-2. **Schema: keep 9 columns, not 6.**
-   Update `_parse_csv` to keep:
-   `open_time, open, high, low, close, volume, close_time,
-   number_of_trades, taker_buy_base_volume, taker_buy_quote_volume`.
-   Drop only `quote_asset_volume` (redundant with close × volume) and the `ignore` field.
-   Use `open_time` as the canonical index, UTC.
-
-3. **Timezone: explicit UTC everywhere.**
-   - After `pd.to_datetime(..., unit='ms')`, add `.dt.tz_localize('UTC')`.
-   - Replace every `datetime.now()` with `datetime.now(timezone.utc)`.
-   - Remove the `tzinfo=None` stripping in `_is_candle_complete` — compare in UTC directly.
-
-4. **SHA256 checksum verification.**
-   For every monthly/daily ZIP at `{url}.zip`, also fetch `{url}.zip.CHECKSUM` (a one-line file: `<sha256>  <filename>`).
-   Verify the SHA256 of the downloaded bytes matches; reject mismatches with a hard error.
-   Append verified hashes to `data/raw/checksums.jsonl` for audit.
-
-5. **Keep timestamp auto-detection; do not pin to `ms`.**
-   Binance has historically used both millisecond (13-digit) and microsecond (16-digit) timestamps across different data sources and time periods.
-   Pinning to `ms` would silently corrupt any `us`-encoded rows.
-   Instead, detect by numeric range in `_parse_csv`: ms values fall in
-   `[1_262_304_000_000, 32_503_680_000_000]`, us values are 1000× larger, seconds values are 1000× smaller — the ranges are non-overlapping so detection is unambiguous.
-   Apply the check column-wide (`.all()`) since Binance CSVs use a single consistent encoding per file.
-
-6. **Logging and config.**
-   - Replace every `print(...)` with stdlib `logging` (logger name
-     `assareh.fetch`).
-   - Inject `data_dir` from `Settings` rather than the relative default.
-     The entrypoint reads `Settings`; the downloader accepts the path.
-
-7. **Retry with backoff.**
-   Wrap downloads in a `requests.Session` configured with:
-
-   ```python
-   HTTPAdapter(max_retries=Retry(
-       total=5, backoff_factor=1.0,
-       status_forcelist=[429, 500, 502, 503, 504],
-   ))
-   ```
-
-### What to keep from the original
-
-- Current month is skipped in monthly archives (Binance doesn't publish it until the month closes) and filled in via daily archives. Correct.
-- `_remove_incomplete_candles` filters the currently-forming bar before any merge.
-  Keep — this is what makes re-runs safe.
-- ccxt overlap-verification uses 10 candles by default and a 20%-rows-differ failure threshold for volume.
-  This is the right tolerance for cross-source comparison; do not tighten.
-- The `_get_interval_config` lookback-per-interval table is well-reasoned; keep as-is.
+- **Output.** One Parquet file per interval at
+  `data/raw/btcusdt_{interval}.parquet`, zstd-compressed, columns
+  conforming to `OHLCV_SCHEMA` (D-021). The downloader stays pandas
+  internally; the Polars loader (A.3) consumes the Parquet.
+- **Timestamps.** UTC-aware throughout. Binance Vision CSVs are not
+  internally consistent in timestamp encoding — the parser detects
+  ms / us / s by numeric range, column-wide (L-016). `OHLCV_SCHEMA`
+  specifies `us`-precision UTC; the loader's cast (D-034) reconciles the
+  pandas-Parquet ms round-trip without rejecting valid data, with the
+  not-UTC-aware case backstopped as a hard integrity failure (D-022).
+- **Archive integrity.** For every monthly/daily ZIP, the co-located
+  `.CHECKSUM` is fetched when available; SHA-256 verification is enforced
+  on presence and skipped with a warning on absence (D-019, L-005). Every
+  verified hash is appended to `data/raw/checksums.jsonl` for audit; the
+  log records *only* checksums that were actually verified, so it never
+  overstates coverage.
+- **Tail fill.** `ccxt` fills the gap between the last archived day and
+  "now". Before append, the new bars are cross-verified against the
+  existing Binance archive on 10 completed overlapping candles, with a
+  ≤20% per-column mismatch tolerance (looser on volume than OHLC) — a
+  larger mismatch raises and aborts the update. The three ancillary
+  columns (`number_of_trades`, `taker_buy_base_volume`,
+  `taker_buy_quote_volume`) are unavailable from `ccxt.fetch_ohlcv` and
+  are filled with **explicit zero** rather than NaN (D-020); Phase D
+  must guard these columns with a `> 0` check or `has_ancillary` flag
+  (see L-003).
+- **Idempotence.** The currently-forming bar is filtered before any
+  merge, and merges deduplicate on `open_time`, so re-running the
+  entrypoint downloads only what's new and exits cleanly with no
+  duplicate rows.
+- **Coverage strategy.** The current month is skipped in the monthly
+  archive scan (Binance does not publish it until the month closes) and
+  filled in via the daily-archive scan; the ccxt tail then covers from
+  the last completed daily archive up to "now".
+- **Errors.** Hard-fail on a present-but-mismatched archive checksum or
+  on ccxt overlap-verification failure. Transient HTTP (429, 5xx) is
+  retried with exponential backoff via a `requests.Session` configured
+  with `HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1.0,
+  status_forcelist=[429, 500, 502, 503, 504]))`.
+- **Logging & config.** Paths, symbol, and intervals come from
+  `Settings`; the downloader takes them as constructor arguments rather
+  than reading globals. All log lines route through
+  `logging.getLogger("assareh.fetch")`; the entrypoint configures the
+  root logger from `Settings.log_level`. No `print()`.
 
 ### Entrypoint: `scripts/fetch_binance_ohlcv.py`
 

@@ -228,12 +228,14 @@ Baselines first, model later — this is the methodology checkpoint.
   rather than a re-derivation. Prevents the gap math from silently
   reweighting or redefining anything.
 - A reusable `evaluate(signals, prices, fold, *, arm) -> Metrics` interface;
-  `arm` selects which probe configuration is active across the full probe
-  catalogue (statistical-discipline: cost model, fill resolution, embargo,
-  geometry, feature scope; data-handling: gap-fill discipline, NaN policy,
-  pATR fill policy, cross-TF alignment method) so a single call site can
-  drive every arm. This is the runtime form of the D-001 governing rule —
-  every arm passes through the same code path
+  `arm` selects which configuration is active across the full dual-arm
+  catalogue — **8 leakage probes** (statistical-discipline: D-004
+  embargo, D-006 barrier-touch resolution, D-010 walk-forward geometry,
+  D-013 feature-selection scope; data-handling: D-036 gap-fill, D-037
+  NaN policy, D-038 pATR fill, D-039 cross-TF alignment) plus **2
+  retained comparison arms** (D-009 loss function, D-011 cost model
+  gross/net). A single call site drives every arm — the runtime form of
+  the D-001 governing rule
 
 **Why this comes before the model:** if the harness is wrong, every number that
 follows is meaningless. Building it on baselines forces the interface to be

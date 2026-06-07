@@ -24,10 +24,8 @@ logger = logging.getLogger("assareh.fetch")
 
 
 class BinanceDownloader:
-    """Downloader that merges the original v1 implementation with Layer A.3
-    improvements: Parquet output, 9-column schema, UTC timestamps,
-    checksum verification, retries, and structured logging.
-    """
+    """Acquire BTC/USDT OHLCV from Binance Vision archives + ccxt tail and
+    write canonical-schema Parquet. Behavior contract: docs/PHASE_A.md §A.2."""
 
     MONTHLY_URL = "https://data.binance.vision/data/spot/monthly/klines"
     DAILY_URL = "https://data.binance.vision/data/spot/daily/klines"
@@ -293,14 +291,13 @@ class BinanceDownloader:
         if path.exists():
             df = pd.read_parquet(path)
             # ensure timezone-aware datetimes
-            if not pd.api.types.is_datetime64tz_dtype(df['open_time']):
+            if not isinstance(df['open_time'].dtype, pd.DatetimeTZDtype):
                 df['open_time'] = pd.to_datetime(df['open_time']).dt.tz_localize('UTC')
             return df
         return None
 
-    def _get_interval_config(self, interval: str):
-        # reuse v1 table
-        configs = {
+    def _get_interval_config(self, interval: str) -> tuple[float, int]:
+        configs: dict[str, tuple[float, int]] = {
             '1m': (0.5, 2000),
             '3m': (1, 1500),
             '5m': (2, 1500),

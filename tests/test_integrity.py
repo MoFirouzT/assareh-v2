@@ -1,8 +1,12 @@
+from typing import Literal
+
 import pytest
 
 from assareh.config import Settings
 from assareh.data.integrity import check_cross_timeframe_alignment, check_integrity
 from assareh.data.loader import load_ohlcv
+
+Timeframe = Literal["1m", "15m", "1h", "4h"]
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +126,7 @@ def test_cross_timeframe_missing_reference_fails(synthetic_ohlcv):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("timeframe", ["1m", "15m", "1h", "4h"])
-def test_real_data_passes_integrity(timeframe):
+def test_real_data_passes_integrity(timeframe: Timeframe):
     settings = Settings()
     if not (settings.raw_dir / f"btcusdt_{timeframe}.parquet").exists():
         pytest.skip(f"Real {timeframe} Parquet not present")
@@ -150,7 +154,7 @@ def test_real_data_passes_integrity(timeframe):
 
 def test_real_cross_timeframe_alignment():
     settings = Settings()
-    required = ["1m", "15m", "1h", "4h"]
+    required: list[Timeframe] = ["1m", "15m", "1h", "4h"]
     missing = [tf for tf in required
                if not (settings.raw_dir / f"btcusdt_{tf}.parquet").exists()]
     if missing:
