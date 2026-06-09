@@ -86,7 +86,7 @@ Define the prediction target rigorously, design walk-forward splits
 that respect the temporal structure *and* the label horizon, and lock in the
 evaluation-harness skeleton *before* writing any model.
 
-**Exit criteria:** label modules, splits, and held-out reservation tested; D-008 Stage 1 (threshold structure) appended; D-014 ratification queued for Phase E; B-phase decision entries in DECISIONS.md.
+**Exit criteria:** label modules, splits, and held-out reservation tested; D-008 Stage 1 (threshold structure) appended; D-014 ratification queued for Phase E; **D-040 (qualified-event filter) resolved to Accepted/Rejected**; B-phase decision entries in DECISIONS.md.
 
 **Key deliverables:**
 
@@ -96,8 +96,10 @@ evaluation-harness skeleton *before* writing any model.
 - Triple-barrier target function with tests — **1m-resolved barrier ordering
   primary** (honest arm), 15m-optimistic ordering retained as the v1-faithful
   comparison arm (D-006). Barriers anchored on the 15m close (D-027); 1m
-  intra-bar tie-break by `close > open` direction (D-028); MTF pATR split
-  (longer-horizon pATR for target, shorter for stop, D-026)
+  intra-bar tie-break by `close > open` direction (D-028); **both barriers use
+  15m pATR** by default (D-026 revised — friend's recommendation + the inspected
+  v1 config; MTF asymmetry kept available, off by default); horizon defaults to
+  ~48 bars (two-TF-higher rule, D-003; 511 reproduces v1)
 - **Data-handling leakage probes wired into label construction**
   (L-008, L-010). The v1-faithful labeling arm additionally reproduces
   *(i)* v1's non-causal `LinearInterpolator` gap fill on the 1m
@@ -106,12 +108,17 @@ evaluation-harness skeleton *before* writing any model.
   `TargetExtractor` (D-038). The honest arm leaves gaps observed (D-024)
   and uses only pATR realised at or before `t`; bars where either is
   unresolvable emit typed-null labels (D-029) rather than fabricated ones
-- **Meta-labeling outputs (D-014 gate).** `make_labels` returns both `rt3`
-  (side / primary label) and `target3` (meta-label via `stop2` slack),
-  matching v1's `TargetExtractor3`. Whether `target3` powers a two-stage
-  meta-model in Phase E or is emitted for archival only is **D-014's open
-  question, ratified before Phase E begins**; the schema is cheap to keep
-  open either way. `rt3` is the primary label on both paths
+- **Side label only (D-014 gate).** `make_labels` returns `rt3`, the three-class
+  side label. v1's embedded `target2`/`target3`/`stop2` meta-label path is **not
+  reproduced** — it was a discarded v1 experiment (L-006 corrected, L-017).
+  Learned meta-labeling is a *new* v2 idea (D-014): whether a separate meta-model
+  is trained on top of `rt3` in Phase E is **D-014's open question, ratified
+  before Phase E begins**
+- **Resolve v1's qualified-event filter (D-040, open).** v1 ran `consider_res=True`
+  (a `qualified` flag from trend-residual columns gating labeling events). Decide
+  before B.1 is locked whether the v1-faithful arm reproduces it and whether the
+  honest arm carries a `qualified` column; until then the default is D-002's
+  unqualified per-15m-close cadence (L-017, D-040)
 - `LabelResult` as a single Polars DataFrame on the 15m decision clock with
   typed-null tail sentinels (D-029); per-arm same-bar ambiguity rates logged
   at both 15m and 1m grain
@@ -121,7 +128,8 @@ evaluation-harness skeleton *before* writing any model.
   lands at the C/D handoff once D-011's cost model is fixed, feeding the
   success threshold's Stage 2 (below)
 - Walk-forward CV scheme implemented and tested, with **purging + embargo
-  (embargo ≥ 511 bars, the full label horizon)** (D-004), concretely sized
+  (embargo = `horizon_bars`, the full label horizon — 48 by default, 511
+  v1-faithful)** (D-004), concretely sized
   to **8 folds, ~2y initial anchor, ~1 quarter test per fold, ~6w val per
   fold** (D-010 added detail); the v1 single 75/15/10 chronological split
   retained as a comparison configuration; `cpcv` scheme value reserved in
@@ -295,15 +303,17 @@ walk-forward CV, evaluate it against baselines under the harness.
 **Gate before any model is fit — D-014 ratification.**
 Resolve whether this iteration includes meta-labeling. Two paths:
 
-- **Ratified.** Add a binary meta-model trained on `target3` for bars where
-  the primary takes a position (`ŝ_t ≠ 0`). Action threshold = cost-adjusted
-  breakeven (D-007); sizing by conviction above breakeven (de Prado's
-  probability→size map, recentred on breakeven, not 0.5). Primary tuned for
-  recall, meta-model supplies precision.
-- **Deferred (follow-on iteration).** `target3` is emitted by Phase B but
-  unused here. Phase E's directional collapse (`rt3 → {long, no-trade,
-  short}` with `0` folded into "no-trade") carries the iteration. D-009's
-  loss arms remain the dual-arm.
+- **Ratified.** Add a binary meta-model for bars where the primary takes a
+  position (`ŝ_t ≠ 0`), trained on the **derived** meta-label
+  `m_t = 1[ŝ_t = rt3_t]` (was the primary's call correct) — computed at train
+  time from `rt3`, *not* read from a v1 `target3` column (which is no longer
+  produced; L-006 corrected, L-017). Action threshold = cost-adjusted breakeven
+  (D-007); sizing by conviction above breakeven (de Prado's probability→size map,
+  recentred on breakeven, not 0.5). Primary tuned for recall, meta-model supplies
+  precision.
+- **Deferred (follow-on iteration).** No meta-model this iteration. Phase E's
+  directional collapse (`rt3 → {long, no-trade, short}` with `0` folded into
+  "no-trade") carries the iteration. D-009's loss arms remain the dual-arm.
 
 The verdict is appended to D-014 (Proposed → Accepted or Superseded) and to D-008's Stage 2 commit, before any model is fit.
 

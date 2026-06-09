@@ -133,9 +133,21 @@ archive that *does* provide a checksum is verified and the hash is logged to
 
 ---
 
-## L-006 — v1's `target2=True` is embedded meta-labeling
+## L-006 — v1's `target2=True` is embedded meta-labeling — but it was a *failed experiment*
 
 **Discovered:** Phase B preparation — reverse-engineering the v1 TargetExtractor family
+**Corrected:** 2026-06-09 — friend feedback + notebook verification (L-017)
+
+> **⚠️ Correction (2026-06-09).** The mechanism described below is real — `target2=True`
+> *does* implement rule-based meta-labeling in the labeler. But the conclusion ("v2 must
+> reproduce both `rt3` and `target3`") was wrong. A friend who worked on v1 reports
+> `target2`/`stop2_slack` are **left over from a failed experiment**, and the notebooks
+> confirm it: the labeler runs with `target2=True`, yet **every** `generate_results(...)`
+> call evaluates with `target2=False` — the meta-label was produced and then discarded.
+> So the v1-faithful Phase-B arm reproduces the **side label only** (no `target3`,
+> no `stop2`); D-014 stands purely as a *new* v2 idea, not a v1 reproduction. See L-017,
+> D-014 (corrected), and PHASE_B B.1.
+
 
 Analysis of `TargetExtractor` through `TargetExtractor4` reveals that the
 `target2=True` branch is not a labeling quirk — it is a **rule-based
@@ -168,6 +180,17 @@ parameter must be configurable (default 1, matching v1). See PHASE_B.md B.1.
 ## L-007 — Multi-timeframe ATR term structure: why longer-vol for target, shorter-vol for stop
 
 **Discovered:** Phase B preparation — analyzing TargetExtractors 2–4
+**Scope-clarified:** 2026-06-09 (L-017)
+
+> **Note (2026-06-09).** The term-structure *reasoning* below is sound and retained. What
+> changed is the v2 *default*, not this finding's validity. In the `latest_code_and_results`
+> config, `TargetExtractor3` runs `target_patr=15, stop_patr=15` (15m for both), and a
+> friend who worked on v1 advises 15m-for-both ("do not use 1h/4h for now"), so MTF moves
+> to an **off-by-default, available** experiment in v2 (D-026 revised). This is *not* a
+> claim that MTF was never used in v1 — `latest_code_and_results` is only part of the v1
+> tree, and MTF is a real supported path that may appear in older `Assareh/` experiments.
+> Whether any reported v1 number used MTF is open pending the friend's confirmation.
+
 
 The MTF pATR design (longer ATR for the profit target, shorter ATR for the
 stop) is an application of **volatility term structure** reasoning:
@@ -196,6 +219,19 @@ This reasoning is captured as a design decision in **D-026**.
 
 **Discovered:** v1 data-handling audit.
 **Affected:** every gap-crossing label in v1's training window (2017-08-28 onward), all four timeframes
+
+> **Note (2026-06-09) — ZOH vs LinearInterpolator, to confirm with the friend.** A friend
+> who worked on v1 recalled that **zero-order hold** was the gap-fill used. In the
+> `latest_code_and_results` path, `BtcPreprocessor.interpolate_the_raw_data_and_add_up_first`
+> (`:148-152`) constructs `LinearInterpolator(...)` with `causal=False` (`:252-253`) — the
+> **non-causal weighted average** (`:396-415`) — and does not call `ZeroOrderHold` (`:427`).
+> These two are not necessarily in conflict: `latest_code_and_results` is only part of the
+> v1 tree, and ZOH is a real v1 class that may have been the gap-fill in other experiments
+> under `Assareh/`. **Do not treat this as "the friend misremembered."** The v1-faithful
+> arm currently reproduces the non-causal weighted average it can see (D-036); causal ZOH is
+> added as a *separate* comparison arm anyway. **Open:** confirm with the friend which
+> gap-fill produced the v1 numbers we compare against. See L-017.
+
 
 v1's `BtcPreprocessor` runs `LinearInterpolator` on each timeframe before
 anything else touches the data.
@@ -287,6 +323,15 @@ operate on different NaN sources but compound: a gap creates NaN cells
 that the interpolator fills with future-weighted synthetics, and any NaN
 that slips through gets `bfill`'d at the `DataMixer` stage. Both must be
 disabled in the honest arm; the v1-faithful arm reproduces both.
+
+> **Note (2026-06-09) — practical magnitude is smaller than the mechanism suggests.**
+> A friend who worked on v1 confirms the `bfill` look-ahead but adds that **most**
+> affected rows were already removed during data framing: the models carry a look-back
+> window, so the first N−1 samples (which is where back-filled warm-up cells concentrate)
+> were dropped before training anyway. The leak is real but its trained-sample footprint
+> is modest. The correct fix is unchanged — flag/mask the cells and omit them from train
+> and validation (the honest arm, D-037) — but the *expected* honest-vs-v1 gap from this
+> probe should be small. Worth confirming empirically when D-037 runs.
 
 ---
 
@@ -573,3 +618,81 @@ of which encoding Binance happened to publish for a given archive. The
 guard is local to Vision CSV parsing; no downstream code needs to be aware
 of it, because `OHLCV_SCHEMA` pins the final dtype at the loader boundary
 (D-034).
+
+---
+
+## L-017 — Reading v1's `latest_code_and_results` notebooks refines (does not overturn) several docs
+
+**Discovered:** 2026-06-09 — friend feedback on Phase A/B prompted a direct read of
+v1's production notebooks, not just the `TargetExtractor` class definitions.
+
+> **⚠️ Scope caveat — read this first.** Everything below is observed in
+> **`latest_code_and_results`**, which is **only part of v1**. The broader
+> `Assareh/` parent tree holds older tests, experiments, and decisions not yet
+> inventoried. So these observations describe *the config we can currently see*;
+> they are **not** proof that an alternative (MTF pATR, ZeroOrderHold, etc.) was
+> never used in v1, and they do **not** mean an earlier doc was "wrong" or the
+> friend "misremembered." Where the friend gave an explicit instruction (e.g.
+> drop `target2`; use 15m pATR for now) we act on it; otherwise we keep both
+> possibilities open until he confirms.
+
+Earlier Phase-B prep entries (L-006, L-007) and D-026 were written from the
+`TargetExtractor` *class* code. Reading what these notebooks actually
+**instantiate** refines some of them. Every notebook in `latest_code_and_results`
+(`0_Preprocessing.ipynb`, `E1_Bulk`, `E2_Default`, `E4_LossFn`, `E6_Single`)
+runs the identical line:
+
+```python
+TargetExtractor3(colprefix='', target_patr=15, stop_patr=15,
+                 m_pt=(1+np.sqrt(5)), m_ps=2, m_nt=950, m_ns=2,
+                 target2=True, consider_res=True)
+```
+
+and later evaluates with `generate_results(..., target2=False, ...)`.
+
+| Earlier doc said | What this config shows | Status |
+|:--|:--|:--|
+| v1 used MTF pATR (240 target / 60 stop) | here it runs `target_patr=15, stop_patr=15` (15m for both); friend recommends 15m for v2 | D-026 default → 15/15; **MTF kept available**, v1 use elsewhere **unconfirmed** |
+| v1-faithful arm must reproduce `rt3` **and** `target3` | made with `target2=True` but **always evaluated `target2=False`** | friend **confirmed** target2 a failed experiment → dropped (D-014, L-006) |
+| breakeven multipliers `4 / 2.5` | this config used `m_pt=1+√5≈3.236, m_ps=2`; `m_nt=950` makes the short target ~unreachable | **friend says the old 4/2.5 multipliers are OK** → keep 4/2.5 (D-007) |
+
+Other observations from the same read:
+
+- **Horizon `n = 16×16×2−1 = 511`** is the value in this config
+  (`btc_feature_engineering_utils.py:1080`). Friend recommends ~2–4 candles of
+  the two-steps-higher timeframe (for 15m → ~3×4h ≈ 48 bars); v2 default moves to
+  48, 511 kept as the v1-faithful value (D-003 added detail).
+- **Gap fill** here is `LinearInterpolator(causal=False)` (non-causal weighted
+  average); `ZeroOrderHold` exists in the codebase but isn't called on this path.
+  Whether ZOH was used in other v1 experiments is open (L-008 note).
+
+**Methodological lesson (the real takeaway).** Two cautions, both from the user's
+feedback: (1) class defaults ≠ what was run, so pin v1-faithful params to the
+**call sites** that produced the numbers we compare against; and (2) those call
+sites live across the **whole `Assareh/` tree**, not just `latest_code_and_results`
+— so before declaring that v1 "never did X," either find it across the tree or
+get the friend's confirmation. Treat single-folder observations as evidence, not
+verdicts.
+
+**`consider_res=True` is a v1 feature to fold into the plan.** The config sets
+`consider_res=True`, which gates labels on trend-residual columns (`d_resi`,
+`g_resi`, `d_supi`) via a `qualified` flag inside the labeler — an
+event-qualification step distinct from D-015's (rejected) CUSUM filter. Per the
+user's instruction this is now represented in the plan as **D-040** (PHASE_B B.1
+and PLAN Phase B).
+
+---
+
+## L-011 addendum (2026-06-09) — friend's cross-timeframe alignment caution
+
+Friend feedback on L-011: in v1, candles are merged by **index**, but the
+preceding preprocessing was deliberately built so the per-timeframe indices line
+up. If v2 aligns by **timestamp** instead (D-039's `merge_asof`), the join must
+respect that a higher-timeframe bar only becomes known at its **close**: "if one
+timeframe's scale is 4× another, the larger bar should be matched to the smaller
+bars at/after it completes" (the friend's "5–8 sub-bars" phrasing is ambiguous
+and needs confirmation). This is consistent with D-039's backward-`merge_asof`
+on the 15m clock (higher-TF bar visible at/after close, never the forming bar);
+recorded here so the alignment discipline is cross-checked against someone who
+built v1's alignment. **Open:** clarify the exact "5–8" sub-bar rule with the
+friend before encoding any offset beyond the close-visibility rule.

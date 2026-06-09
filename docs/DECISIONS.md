@@ -35,7 +35,7 @@ first line of the decision body, not in the status field.
 | D-023 | Price sanity bounds: close ∈ [100, 1 000 000] for BTC/USDT            | A     | Accepted |
 | D-024 | Gap handling: soft observation, never forward-fill                    | A     | Accepted |
 | D-025 | Cross-timeframe alignment check severity                              | A     | Accepted |
-| D-026 | Multi-timeframe pATR: longer-horizon for target, shorter for stop     | B     | Accepted |
+| D-026 | pATR for barriers: 15m for both default (MTF kept available)          | B     | Revised  |
 | D-027 | Entry-price convention: close of the 15m bar at `t`                   | B     | Accepted |
 | D-028 | 1m intra-bar tie-break (honest arm)                                   | B     | Accepted |
 | D-029 | `LabelResult` schema and tail-sentinel dtype                          | B     | Accepted |
@@ -49,6 +49,7 @@ first line of the decision body, not in the status field.
 | D-037 | Feature-frame NaN policy (leakage probe)                              | D     | Accepted |
 | D-038 | pATR fill policy in label construction (leakage probe)                | B     | Accepted |
 | D-039 | Cross-timeframe alignment method (leakage probe)                      | D     | Accepted |
+| D-040 | v1's qualified-event filter (`consider_res`)                          | B     | Open     |
 
 ---
 
@@ -115,6 +116,22 @@ first line of the decision body, not in the status field.
   project avoids. The open head-architecture question (three-class vs. binary) is
   resolved by **D-014 (meta-labeling)**: the primary model predicts side and a
   binary meta-model absorbs the `0` class as "don't act."
+- **Added detail (2026-06-09) — horizon length changed: default ≈ 48 bars,
+  511 reserved for v1-faithful reproduction.** v1's `TargetExtractor3` used
+  `n = 16 × 16 × 2 − 1 = 511` 15m bars (~5.3 days) as the vertical barrier
+  (`btc_feature_engineering_utils.py:1080`). A friend who worked on v1 advises
+  the **typical horizon should be 2–4 candles of the timeframe two steps higher**
+  — for the 15m decision clock that is the 4h frame, so ~3 × 4h = **48 15m bars**
+  (~12 h), range **32–64** (2–4 × 4h). v1's 511 is ~8–16× longer than this and
+  reads as an unprincipled heuristic (a quadratic in the 4h/15m ratio) rather
+  than a horizon chosen to the decision cadence. **Verdict:** the v2 **default
+  horizon becomes `horizon_bars = 48`** (configurable 32–64); `511` is kept only
+  as the explicit value when reproducing v1's published numbers (v1-faithful
+  arm). **Ripple:** every horizon-pinned quantity follows the *active* horizon,
+  not a hardcoded 511 — D-004's purge/embargo length (`= horizon`), D-005's
+  overlap/uniqueness windows, and D-038/D-036 typed-null regions all key off
+  `horizon_bars`. The "511" figures in D-004/D-005 and L-002/L-008 remain valid
+  as descriptions of the **v1-faithful** configuration. See L-017.
 
 ## D-004 — Embargo and purging
 
@@ -142,9 +159,14 @@ first line of the decision body, not in the status field.
   (`getTrainTimes`) must handle three overlap cases — train starts within test,
   train ends within test, train envelops test — with a property-based test
   asserting no surviving training window intersects any test span. The embargo
-  length is pinned to the **horizon** (511), deliberately stronger than LdP's
+  length is pinned to the **active horizon**, deliberately stronger than LdP's
   "~1% of observations" heuristic, because the horizon is the true dependence
   timescale here.
+- **Note (2026-06-09).** The "511" figures throughout this entry describe the
+  **v1-faithful** horizon. Per D-003 (added detail) the v2 default horizon is now
+  **48 bars**, so the default purge window and embargo are **48**, not 511 —
+  embargo = `horizon_bars` regardless of which value is active. The 511 numbers
+  remain correct for the v1-faithful arm.
 
 ## D-005 — Sample-uniqueness weighting
 
@@ -209,6 +231,15 @@ first line of the decision body, not in the status field.
 - **v1 behavior.** Multipliers `m_of_target = 4`, `m_of_stop = 2.5` were used,
   but the implied 38.5% breakeven was never written down; 50% was the implicit
   yardstick.
+- **Note (2026-06-09) — keep the `4 / 2.5` multipliers (resolved).** While
+  reading `latest_code_and_results` I noticed its `TargetExtractor3` ran
+  `m_pt=1+√5≈3.236, m_ps=2` (long) and `m_nt=950, m_ns=2` (short), which differs
+  from the `4 / 2.5` of the original `TargetExtractor` (`E*_*.ipynb:164`). The
+  user confirmed **the old `4 / 2.5` multipliers are OK** — so v2 keeps
+  `m_target=4.0, m_stop=2.5` (breakeven 38.5%), and PHASE_B's hardcoded values
+  stand. The differing values in that one notebook are recorded for context only
+  (and as a reminder that other v1 experiments used other multipliers); not an
+  open item. See L-017.
 - **Verdict.** Adopt (no real optionality).
 - **Rationale.** With a 1.6 : 1 reward:risk, 50% is the wrong bar; a 45%
   precision is already an edge here. Stating the true bar prevents misreading
@@ -419,7 +450,21 @@ first line of the decision body, not in the status field.
 - **Recorded alternative.** Single-stage three-class / scalar head (v1, D-009) —
   kept as comparison arm. If meta-labeling is deferred to a follow-on iteration, fall back to
   the directional collapse with `0` folded into "no-trade," and revisit.
-- **Added detail (2026-05-27) — v1 already implemented this implicitly.**
+- **⚠️ Correction (2026-06-09) — the "v1 already did this" claim is retracted.**
+  The 2026-05-27 detail below argued v1 implicitly implemented meta-labeling via
+  `target2=True` and that the v1-faithful arm must reproduce both `rt3` and
+  `target3`. A friend who worked on v1 reports `target2`/`stop2_slack` are
+  **"left from a failed experiment"**, and the code agrees: although the labeler
+  is instantiated with `target2=True`, **every** `generate_results(...)` call
+  evaluates with `target2=False` (`E1/E2/E4/E6_*.ipynb`, `0_Preprocessing.ipynb`)
+  — v1 produced the meta-label and then did not use it in reported results. So
+  D-014 stands **only as a new v2 idea** (learned meta-labeling in Phase E), not
+  as a reproduction of something v1 did. The v1-faithful Phase-B labeler **drops
+  `target2`/`stop2_slack`** and produces the plain three-class side label only;
+  `stop2_level` is removed from `LabelResult`. See L-006 (corrected), L-017, and
+  PHASE_B B.1. The text below is kept for the record but is no longer load-bearing.
+- **Added detail (2026-05-27) — v1 already implemented this implicitly
+  [RETRACTED — see correction above].**
   Analysis of v1's `TargetExtractor` family reveals that `target2=True` is an
   **embedded, rule-based meta-labeling** step baked into the labeler itself:
   - `rt3` = the *raw first crossing* = **primary label / side**.
@@ -433,9 +478,10 @@ first line of the decision body, not in the status field.
     from a signal to a non-event in the meta-label.
   The two outputs (`rt3`, `target3`) therefore form exactly the (side, meta)
   label pair that the v2 two-stage model consumes. The v1 labeler hard-coded
-  the meta-label rule; v2 (D-014) learns it from data. The v1-faithful arm
-  in Phase B must reproduce **both outputs**, not just `target3`; see PHASE_B.md
-  B.1 for the updated `make_labels` signature.
+  the meta-label rule; v2 (D-014) learns it from data. ~~The v1-faithful arm
+  in Phase B must reproduce both outputs, not just `target3`.~~
+  **[Superseded by the 2026-06-09 correction: `target3` is not reproduced; the
+  v1-faithful arm produces the side label only.]**
 
 ## D-015 — Labeling event filter (sampling cadence)
 
@@ -737,31 +783,45 @@ first line of the decision body, not in the status field.
   would produce wrong results silently. The two are complementary, not
   overlapping.
 
-## D-026 — Multi-timeframe pATR: longer-horizon ATR for target, shorter for stop
+## D-026 — pATR for barriers: 15m for both target and stop (MTF kept available)
 
-- **Date:** 2026-05-27 — **Phase:** B (applies to TargetExtractors 2–4 in v1;
-  governs Phase B barrier construction in v2) — **Status:** Accepted
-- **Verdict in one line:** adopt v1 (no methodological change).
-- **Decision.** When multiple pATR timeframes are available (15m / 60m / 240m,
-  or 5m / 15m / 60m / 240m), use a **longer-horizon pATR for the profit target**
-  and a **shorter-horizon pATR for the stop**. For example, TargetExtractor3
-  defaults to `target_patr = patr_240`, `stop_patr = patr_60`. The two can be
-  configured independently; the asymmetry is deliberate.
-- **v1 behavior.** TargetExtractor (single-timeframe) used native pATR for both.
-  TargetExtractors 2–4 introduced the MTF split, with `patr_240` for targets
-  and `patr_60` (plus `stop2` slack) for stops as the primary configuration.
-- **Verdict.** Adopt (no change from v1).
-- **Rationale.** Volatility-term-structure asymmetry. A longer-horizon pATR
-  scales the target to the medium-term regime (filters transient spikes);
-  a shorter-horizon pATR scales the stop to recent volatility (tightens
-  quickly in choppy regimes, widens in calm ones). A single pATR for both
-  barriers creates a mismatch and inflates the timeout class relative to the
-  MTF split. Mechanism is fleshed out in
-  [GLOSSARY → MTF pATR](GLOSSARY.md#mtf-patr-multi-timeframe-asymmetry); the
-  empirical reasoning behind the discovery is in LEARNINGS L-007.
-- **Recorded alternative.** Single-timeframe pATR for both barriers (v1's
-  TargetExtractor1 configuration) — kept as the single-timeframe comparison;
-  not the default for multi-timeframe runs.
+- **Date:** 2026-05-27; **revised 2026-06-09** — **Phase:** B — **Status:**
+  Revised (default changed to 15/15; MTF retained as an available arm)
+- **Verdict in one line:** default to **15m pATR for both** target and stop, per
+  the friend's explicit v2 recommendation; keep MTF asymmetry as an available,
+  off-by-default experimental arm — **not** discarded.
+- **Decision.** The profit target and the stop are both anchored on the **15m
+  pATR** (`patr_15`) by default. `make_labels` still accepts `target_patr_col`
+  and `stop_patr_col` separately so the asymmetric multi-timeframe configuration
+  (e.g. `patr_240` target / `patr_60` stop) can be run as an **optional
+  experiment**; it is just not the default for this iteration.
+- **Why the default changed (2026-06-09).** A friend who worked on v1 advised
+  directly: *"Use 15m pATR for both target and stop. Do not use 1h or 4h pATR for
+  now."* Consistent with this, the `TargetExtractor3` constructor default is
+  `target_patr=15, stop_patr=15` (`btc_feature_engineering_utils.py:968`,
+  `:972-974`) and the notebooks in `latest_code_and_results`
+  (`0_Preprocessing.ipynb`, `E1/E2/E4/E6_*.ipynb`) instantiate it as 15/15.
+  **Important caveat:** `latest_code_and_results` is **not** all of v1 — the
+  broader `Assareh/` tree holds older experiments/decisions, and MTF (240/60) is
+  a real, supported code path that may have been used in v1 work we haven't
+  inventoried. So this is a *default change for v2*, **not** a finding that the
+  earlier D-026 was wrong or that MTF was never used in v1. The MTF-asymmetry
+  reasoning in L-007 stands on its own; whether any reported v1 number used MTF
+  is **open pending the friend's confirmation** (see L-017).
+- **v1 behavior.** Both barriers anchored on `patr_15` in the
+  `latest_code_and_results` config. The 240/60 split is a supported path; its use
+  elsewhere in v1 is unconfirmed.
+- **Verdict.** Default 15/15 for v2 (friend's recommendation). MTF asymmetry
+  retained as an available, separately reported experiment.
+- **Rationale.** The friend explicitly recommends 15/15 for now, and it matches
+  the config we can see. Defaulting to 15/15 keeps the v1-faithful arm aligned
+  with the inspected config and avoids silently adopting a barrier-scaling choice
+  whose v1 provenance we haven't pinned down. MTF stays one flag away if B.2
+  diagnostics (timeout-class fraction, precision) motivate testing it.
+- **Recorded alternative.** MTF asymmetry (`patr_240` target / `patr_60` stop)
+  — kept as an **available experimental arm**, off by default; the
+  term-structure rationale (L-007) remains valid. Single-timeframe on a
+  *non-15m* native pATR is not pursued.
 - **See also.** [`GLOSSARY.md`](GLOSSARY.md) →
   [MTF pATR](GLOSSARY.md#mtf-patr-multi-timeframe-asymmetry) ·
   [pATR](GLOSSARY.md#patr-percent-atr) ·
@@ -1003,13 +1063,25 @@ first line of the decision body, not in the status field.
 ## D-036 — Gap-fill discipline (leakage probe)
 
 - **Date:** 2026-06-05 — **Phase:** B (primary; downstream in D) — **Status:** Accepted
-- **Decision.** Leakage-probe flavor per D-001. *Honest arm primary*: gaps in
-  raw OHLCV are left as observed (D-024); barrier walks in `make_labels`
-  that would cross an unfilled gap return a typed-null label (D-029);
-  indicator lookbacks in Phase D that would cross a gap return masked
-  cells, dropped by the batch sampler. *v1-faithful arm* (run once, then
-  retired): reproduce v1's `LinearInterpolator` non-causal weighted-average
-  fill before labeling and feature compute.
+- **Decision.** Leakage-probe flavor per D-001, now **three arms** on the
+  `gap_fill` axis. *Honest arm primary*: gaps in raw OHLCV are left as
+  observed (D-024); barrier walks in `make_labels` that would cross an
+  unfilled gap return a typed-null label (D-029); indicator lookbacks in
+  Phase D that would cross a gap return masked cells, dropped by the batch
+  sampler. *v1-faithful arm* (run once, then retired): reproduce v1's
+  `LinearInterpolator` non-causal weighted-average fill before labeling and
+  feature compute. *Causal-ZOH comparison arm (added 2026-06-09)*: forward-fill
+  each gap by repeating the last observed bar (zero-order hold) — **causal**, so
+  no look-ahead, but still fabricates bars. It isolates how much of the
+  honest-vs-v1 gap is due to *non-causality* (the weighted average reaching into
+  the next real bar) versus *fabrication per se* (synthesizing any bar at all):
+  ZOH removes the former while keeping the latter.
+- **Why three arms.** A friend who worked on v1 suggested ZOH as the gap-fill
+  improvement (Phase-B feedback B1-A), while their Phase-A note (L-008) prefers
+  flagging nulls and excluding them — i.e. the typed-null honest arm. The two
+  are not in conflict once ZOH is positioned as a *middle* comparison point
+  rather than the trusted result: honest (typed-null) stays primary, ZOH sits
+  between honest and v1-noncausal, and the deltas attribute the inflation.
 - **v1 behavior.** Default
   `LinearInterpolator._estimate_ohlcv_and_insert_the_candles` synthesizes
   missing OHLCV by weighted average of the *previous and next* available
@@ -1109,3 +1181,38 @@ first line of the decision body, not in the status field.
   for both arms — rejected; v1's published numbers came from the
   counter-walked mix and the gap-artifact row needs to measure *that*
   inflation.
+
+## D-040 — v1's qualified-event filter (`consider_res`)
+
+- **Date:** 2026-06-09 — **Phase:** B — **Status:** Open (to decide; recorded so
+  it isn't lost — per user instruction to represent it in the plan)
+- **Context.** v1's `TargetExtractor3` was run with `consider_res=True` in
+  `latest_code_and_results`. This sets a per-bar `qualified` flag derived from
+  trend-residual columns (`d_resi`, `g_resi`, `d_supi`) — i.e. only bars meeting
+  a trend-residual condition are treated as genuine labeling events; the flag is
+  computed inside the labeler and carried alongside the label
+  (`btc_feature_engineering_utils.py` `TargetExtractor3._generate_the_targets_df`,
+  `reversal_detector(..., qualified)`).
+- **Why it matters.** This is an **event-qualification / sampling-cadence**
+  mechanism, conceptually adjacent to D-015 (the CUSUM filter we *rejected* for
+  this iteration). v1 actually shipped a qualification filter of its own, so the
+  v1-faithful arm's label *distribution* may depend on it. It is currently
+  **not** modeled anywhere in v2's labeler or splits.
+- **Open questions to resolve in Phase B (before B.1 is locked):**
+  1. What exactly do `d_resi` / `g_resi` / `d_supi` encode, and how is
+     `qualified` combined into them (the call site reads
+     `qualified = int(above_d_res or above_g_res or above_d_sup)`)?
+  2. Does `qualified` *filter* which bars get labeled, or only *annotate* them?
+     (Determines whether it changes the base rate / class balance.)
+  3. Should the v2 v1-faithful arm reproduce it, and should the honest arm carry
+     a `qualified` column for analysis even if it doesn't filter on it?
+- **Verdict.** None yet — **open**. Resolve by reading the v1 indicator code that
+  produces the `*_resi`/`*_supi` columns (across the full `Assareh/` tree, not
+  just `latest_code_and_results`), then convert this entry to Accepted/Rejected
+  with the usual verdict/rationale/alternative.
+- **Recorded alternative.** Ignore `consider_res` entirely (treat every 15m close
+  as an unqualified labeling event, D-002) — the current implicit behavior;
+  retained as the fallback if the filter turns out to be immaterial or
+  reproducible only at disproportionate cost.
+- **See also.** L-017 (where this surfaced); D-002 (decision cadence);
+  D-015 (rejected CUSUM event filter — the honest-arm analogue).

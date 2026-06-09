@@ -183,9 +183,16 @@ Systems* (1978). Locked in **D-012**.
 
 ### MTF pATR (multi-timeframe asymmetry)
 
+> **⚠️ Status (2026-06-09): available experiment, not the v2 default.** The v2
+> default is **15m pATR for both barriers** (`target_patr_col == stop_patr_col ==
+> patr_15`), per the friend's recommendation and the `latest_code_and_results`
+> config (D-026 revised, L-017). The MTF asymmetry below is kept **available**
+> (off by default), not discarded — it is a real v1 code path that may have been
+> used in other v1 experiments; that is unconfirmed pending the friend.
+
 pATR computed at multiple smoothing windows (e.g. `patr_15`, `patr_60`,
-`patr_240` at 15-/60-/240-minute timeframes). For barrier construction the
-two barriers use **different** pATR timeframes:
+`patr_240` at 15-/60-/240-minute timeframes). The *optional* MTF-asymmetry
+configuration would have the two barriers use **different** pATR timeframes:
 
 - **Longer-horizon pATR scales the profit target** (slow — fires only on
   moves large relative to the medium-term volatility regime, reducing
@@ -193,10 +200,9 @@ two barriers use **different** pATR timeframes:
 - **Shorter-horizon pATR scales the stop** (reactive — tightens in volatile
   regimes, widens in calm ones).
 
-`TargetExtractor3` defaults: `target_patr = patr_240`, `stop_patr = patr_60`.
-The asymmetry is deliberate (see **D-026**); the single-timeframe
-configuration is retained as the `TargetExtractor1` comparison. The
-underlying term-structure reasoning is in LEARNINGS L-007.
+The term-structure reasoning (LEARNINGS L-007) is sound and retained; it is simply
+not the v2 default. `patr_240`/`patr_60` remain available for a deliberate,
+separately reported experiment if B.2 diagnostics motivate it.
 
 ### `shift(3)` lag
 
