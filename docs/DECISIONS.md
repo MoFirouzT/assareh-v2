@@ -48,6 +48,7 @@ first line of the decision body, not in the status field.
 | D-039 | Cross-timeframe alignment method (leakage probe)                      | D     | Accepted |
 | D-040 | v1's qualified-event filter (`consider_res`)                          | B     | Accepted |
 | D-041 | v1-faithful qualified sample-filter (trend-residual gate)             | D→E   | Accepted |
+| D-042 | Held-out test-window reservation                                      | B→E   | Proposed |
 
 ---
 
@@ -301,8 +302,17 @@ first line of the decision body, not in the status field.
   the **cost-adjusted** value ([D-007](#d-007--breakeven-reference-385-not-50) added detail), not the bare 38.5%. Finalize
   K, N, the DSR confidence, the PBO ceiling (consider adding a `PBO < 0.2`
   clause), and the `V` source before Phase E begins.
-- **Added detail — pinned values.** The pre-registered condition
-  is committed at the close of Phase B with:
+- **Added detail — Stage 1 committed (B.4, 2026-06-11).** Per PLAN's two-stage
+  pre-registration, **Stage 1 locks the rule *structure*** at the close of Phase B
+  (before Phase D); **Stage 2 locks the *values*** (the cost-adjusted breakeven and
+  the final `V` source) at the C/D handoff, before any model is fit. The committed
+  Stage-1 structure: *the honest arm's out-of-sample, **net-of-cost
+  precision-at-threshold** exceeds the **cost-adjusted breakeven** ([D-007](#d-007--breakeven-reference-385-not-50) added
+  detail) with an **`N_eff`-based CI excluding that bar**, on **≥ 5 of 8**
+  walk-forward test folds, with **DSR > 0.95** on the aggregated OOS equity curve
+  and **PBO < 0.2**.* The `N_eff` here is the **overlap-aware uniqueness-sum
+  `Σ ūᵢ`** (D-005 corrected; [L-022](LEARNINGS.md#l-022--kish-on-the-sample-weights-does-not-measure-label-overlap--use-the-uniqueness-sum-for-cis)), **not** Kish on the weights. The pinned
+  Stage-1 values:
   - **N = 8** (walk-forward fold count, [D-010](#d-010--walk-forward-geometry) added detail).
   - **K = 5** (60% pass rate). Stricter than majority (4) but tolerates one or
     two regime folds going badly; "all 8" is too brittle given regime variance.
@@ -314,8 +324,12 @@ first line of the decision body, not in the status field.
     because pre-registration must close at the end of Phase B and CPCV depends
     on Phase-E model output; CPCV remains available in Phase C as a secondary
     `V` source if the trial-set estimator turns out to be too narrow.
-  Breakeven reference is the **cost-adjusted** value (D-007 added detail), to
-  be computed once the [D-011](#d-011--cost-model) cost model is finalized in Phase C.
+
+  **Deferred to Stage 2 (C/D handoff):** the numeric **cost-adjusted breakeven**
+  (once [D-011](#d-011--cost-model)'s cost model lands) and confirmation of the `V` source per
+  [D-016](#d-016--backtest-geometry-walk-forward-vs-cpcv)'s CPCV verdict. The pre-cost reference stays 38.5%; the bar the
+  threshold actually checks is the cost-adjusted value. Stage 1 is now frozen —
+  Phase E cannot retrofit it.
 
 ## D-009 — Loss function
 
@@ -1178,3 +1192,34 @@ first line of the decision body, not in the status field.
   [D-013](#d-013--feature-selection-scope) (Phase D feature-scope discipline);
   [D-015](#d-015--labeling-event-filter-sampling-cadence) (rejected honest-arm event filter);
   [L-017](LEARNINGS.md#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs).
+
+## D-042 — Held-out test-window reservation
+
+- **Phase:** B (mechanism) → E (geometry + evaluation) — **Status:** Proposed
+- **Decision.** Reserve a contiguous block of the most recent data as a **held-out
+  test window**, excluded from *every* walk-forward fold — never touched by CV,
+  scalers, feature selection, or threshold optimization. The **mechanism** is
+  committed in Phase B: `make_walkforward_folds(..., holdout_bars=H)` reserves
+  `[n − H, n)` and end-anchors the walk-forward to `n − H`, so no train/val/test
+  index ever enters the reserved tail (tested). The **geometry** — `H` (length),
+  position (tail per the end-anchored geometry, [D-010](#d-010--walk-forward-geometry) / [L-021](LEARNINGS.md#l-021--the-pinned-walk-forward-geometry-cannot-cover-875-years-with-8-quarter-folds--end-anchored-chosen)) and the
+  **rule for if/when it is evaluated** — is pinned here, as added detail, **before
+  Phase E begins**. Default `holdout_bars = 0` until then (reserves nothing).
+- **v1 behavior.** None — v1 had no untouched held-out set; its 10% "val" block
+  ([D-010](#d-010--walk-forward-geometry)) was used during development. The `v1_single` arm therefore reserves
+  nothing.
+- **Verdict.** Proposed (mechanism accepted and tested in B; geometry/rule pinned
+  before E). This is the VISION "held-out test window" deferred decision.
+- **Rationale.** The walk-forward already produces the honest headline; a single
+  untouched block is a final confirmatory check that the K-of-N + DSR + PBO result
+  ([D-008](#d-008--success-threshold-pre-registration)) was not an artifact of the development loop. It is touched **at most
+  once**, *after* D-008's threshold is already met on the walk-forward, and it does
+  **not** substitute for the threshold. Tail position (vs. interior) keeps it the
+  most out-of-sample and aligns with the end-anchored fold geometry.
+- **Recorded alternative.** No held-out (walk-forward only) — rejected; a
+  pre-registered confirmatory set is cheap insurance against a walk-forward-specific
+  artifact. Interior held-out — deferred; tail is the natural choice under the
+  end-anchored geometry, revisit only if the tail proves regime-atypical.
+- **See also.** [D-010](#d-010--walk-forward-geometry) (end-anchored geometry),
+  [D-008](#d-008--success-threshold-pre-registration) (the threshold this confirms),
+  [L-021](LEARNINGS.md#l-021--the-pinned-walk-forward-geometry-cannot-cover-875-years-with-8-quarter-folds--end-anchored-chosen).

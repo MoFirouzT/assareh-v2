@@ -681,6 +681,24 @@ secondary `V` source if the trial-set estimator turns out to be too narrow.
 The point of pre-registration is that these are fixed before any model
 output exists. They are now fixed.
 
+The `N_eff` in the precision-CI clause is the **overlap-aware uniqueness-sum
+`Σ ūᵢ`** ([D-005](DECISIONS.md#d-005--sample-uniqueness-weighting) corrected,
+[L-022](LEARNINGS.md#l-022--kish-on-the-sample-weights-does-not-measure-label-overlap--use-the-uniqueness-sum-for-cis)),
+**not** Kish on the sample weights — the latter does not reflect label overlap and
+would make the CI over-confident.
+
+### Held-out test-window reservation ([D-042](DECISIONS.md#d-042--held-out-test-window-reservation))
+
+The VISION held-out deferred decision. The **mechanism** lands in B.3's splits API
+and is tested here: `make_walkforward_folds(..., holdout_bars=H)` reserves the final
+`H` rows as a contiguous block excluded from *every* fold (train, val, and test),
+end-anchoring the walk-forward to `n − H`. A test asserts no fold index enters the
+reserved tail. The **geometry** (`H`, tail position per the end-anchored geometry,
+and the rule for *if/when* it is evaluated) is pinned in D-042 **before Phase E
+begins**; the default `holdout_bars = 0` reserves nothing until then. The block is
+touched at most once, after [D-008](DECISIONS.md#d-008--success-threshold-pre-registration)'s
+threshold is already met on the walk-forward, and never substitutes for it.
+
 ### Checkpoint
 
 - DECISIONS.md updated with [D-002](DECISIONS.md#d-002--decision-cadence-15m-bar-close) … [D-029](DECISIONS.md#d-029--labelresult-schema-and-tail-sentinel-dtype) (those not already written in B.0–B.3),

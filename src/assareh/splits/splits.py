@@ -52,6 +52,7 @@ def make_walkforward_folds(
     test_fold_bars: int = 8_640,
     val_fold_bars: int = 4_032,
     embargo_bars: int = 48,
+    holdout_bars: int = 0,
     scheme: Literal["walkforward", "v1_single", "cpcv"] = "walkforward",
 ) -> list[Fold]:
     """Single source of truth for what is train/val/test in every fold.
@@ -61,8 +62,17 @@ def make_walkforward_folds(
     it. `embargo_bars` defaults to `horizon_bars` (D-004); pass `511` alongside
     `horizon_bars=511` to reproduce the v1-faithful horizon. `anchor_train_bars`
     is the *minimum* initial training span required before the earliest fold.
+
+    `holdout_bars` reserves the final `holdout_bars` rows as an untouched held-out
+    block (D-042): the walk-forward end-anchors to `n - holdout_bars`, so no fold —
+    train, val, or test — ever sees the reserved tail. The block is touched at most
+    once, after D-008's threshold is already met (PLAN). Geometry (its length /
+    position / evaluation rule) is pinned in D-042 before Phase E; the default `0`
+    reserves nothing. Ignored for `v1_single` (the v1-faithful arm had no held-out).
     """
     n = len(index)
+    if holdout_bars < 0:
+        raise ValueError(f"holdout_bars must be >= 0, got {holdout_bars}")
     if scheme == "cpcv":
         raise NotImplementedError(
             "scheme='cpcv' is reserved for Phase C (D-016); the value exists so "
@@ -76,19 +86,20 @@ def make_walkforward_folds(
     # Train ends `max(horizon, embargo)` bars before the held-out region: purging
     # drops any label window reaching it; embargo removes the test-adjacent buffer.
     guard = max(horizon_bars, embargo_bars)
-    # End-anchored tiling: the last test block ends at `n`; folds tile backward by
-    # one (non-overlapping) test block; `anchor_train_bars` is the minimum train
-    # before the oldest fold (D-010).
-    required = anchor_train_bars + guard + val_fold_bars + n_folds * test_fold_bars
+    # End-anchored tiling: the last test block ends at `wf_end` (the data end, less
+    # any reserved held-out tail); folds tile backward by one (non-overlapping) test
+    # block; `anchor_train_bars` is the minimum train before the oldest fold (D-010).
+    wf_end = n - holdout_bars
+    required = anchor_train_bars + guard + val_fold_bars + n_folds * test_fold_bars + holdout_bars
     if required > n:
         raise ValueError(
             f"need at least {required} bars for {n_folds} folds + a {anchor_train_bars}-bar "
-            f"anchor, but the index has only {n}."
+            f"anchor + {holdout_bars}-bar held-out, but the index has only {n}."
         )
 
     folds: list[Fold] = []
     for f in range(n_folds):
-        test_start = n - (n_folds - f) * test_fold_bars
+        test_start = wf_end - (n_folds - f) * test_fold_bars
         test_end = test_start + test_fold_bars
         val_start = test_start - val_fold_bars
         train_cut = val_start - guard
@@ -104,8 +115,9 @@ def make_walkforward_folds(
 
     logger.info(
         "make_walkforward_folds: %d folds, test spans [%d, %d) of %d bars; "
-        "oldest train=%d bars (anchor>=%d)",
-        n_folds, folds[0].test_idx[0], n, n, folds[0].train_idx.size, anchor_train_bars,
+        "held-out=%d; oldest train=%d bars (anchor>=%d)",
+        n_folds, folds[0].test_idx[0], wf_end, n, holdout_bars,
+        folds[0].train_idx.size, anchor_train_bars,
     )
     return folds
 

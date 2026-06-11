@@ -71,6 +71,23 @@ def test_anchor_is_minimum_initial_train():
     assert folds[0].train_idx.size >= KW["anchor_train_bars"]
 
 
+def test_holdout_block_untouched_by_any_fold():
+    n, holdout = 200, 30
+    folds = make_walkforward_folds(_index(n), **KW, holdout_bars=holdout)
+    boundary = n - holdout  # [boundary, n) is reserved and must never appear
+    for fold in folds:
+        for arr in (fold.train_idx, fold.val_idx, fold.test_idx):
+            assert arr.max() < boundary
+    # last test block ends exactly at the held-out boundary (end-anchored to wf_end)
+    assert int(folds[-1].test_idx[-1]) == boundary - 1
+
+
+def test_holdout_reduces_available_span():
+    # A held-out large enough to crowd out the folds must raise.
+    with pytest.raises(ValueError, match="held-out"):
+        make_walkforward_folds(_index(200), **KW, holdout_bars=120)
+
+
 def test_v1_single_reproduces_75_15_10():
     n = 1000
     (fold,) = make_walkforward_folds(_index(n), scheme="v1_single")
