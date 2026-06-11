@@ -29,7 +29,7 @@ artifact names will be added in a later pass.
 [MTF pATR](#mtf-patr-multi-timeframe-asymmetry) ·
 [pATR](#patr-percent-atr) ·
 [pTR](#ptr-percent-true-range) ·
-[`shift(3)` lag](#shift3-lag) ·
+[higher-tf pATR join lag](#higher-tf-patr-join-lag) ·
 [Wilder smoothing](#wilder-smoothing)
 
 **Trading economics primer.**
@@ -104,12 +104,10 @@ Verdict and rationale live in **[D-006](DECISIONS.md#d-006--barrier-touch-resolu
 
 ### `up_first` flag
 
-A per-bar directional flag derived from the 1m sub-candles inside each
-higher-timeframe bar: `1` if the bar's high was reached *before* its low
-(net upward intra-bar path), `0` otherwise. Makes the true range
-**directional** by selecting which of the gap terms (`|H − C_prev|` vs.
-`|L − C_prev|`) is "active." A v1 design choice, not standard Wilder ATR,
-preserved in **[D-012](DECISIONS.md#d-012--patr-definition-lock)** and consumed by the 1m first-touch resolution
+A per-bar directional flag derived from the 1m sub-candles inside each higher-timeframe bar:
+`1` if the bar's high was reached *before* its low (net upward intra-bar path), `0` otherwise.
+Makes the true range **directional** by selecting which of the gap terms (`|H − C_prev|` vs. `|L − C_prev|`) is "active".
+A v1 design choice, not standard Wilder ATR, preserved in **[D-012](DECISIONS.md#d-012--patr-definition-lock)** and consumed by the 1m first-touch resolution
 (**[D-006](DECISIONS.md#d-006--barrier-touch-resolution-source)**).
 
 ### `rt3`
@@ -145,22 +143,19 @@ v1's embedded meta-labeling.
 
 ### pATR (percent ATR)
 
-A **price-normalized form of the Average True Range** — each true-range
-component is divided by a reference price, making the series a *ratio*
-that is scale-invariant across price regimes. This is why pATR can be fed
-directly to the model as a stationary feature and why barrier multipliers
-(`4 × pATR`, `2.5 × pATR`) are dimensionless.
+A **price-normalized form of the Average True Range** —
+each true-range component is divided by a reference price, making the series a *ratio* that is scale-invariant across price regimes.
+This is why pATR can be fed directly to the model as a stationary feature and why barrier multipliers (`4 × pATR`, `2.5 × pATR`) are dimensionless.
 
-`pATR` is the [Wilder-smoothed](#wilder-smoothing) average of
-[`pTR`](#ptr-percent-true-range) over `window = 10` bars. The v1 formula is
-locked in **[D-012](DECISIONS.md#d-012--patr-definition-lock)**.
+`pATR` is the [Wilder-smoothed](#wilder-smoothing) average of [`pTR`](#ptr-percent-true-range) over `window = 10` bars.
+The v1 formula is locked in **[D-012](DECISIONS.md#d-012--patr-definition-lock)**.
 
 ### pTR (percent true range)
 
 The per-bar percent true range. From v1's `ta_utils.py:41`
 (`p_true_range`):
 
-```
+```text
 tr1 = (high − low) / (high if up_bar else low)
 tr2 = |high − prev_close| / prev_close
 tr3 = |low  − prev_close| / prev_close
@@ -173,7 +168,7 @@ pTR = max(tr1, tr2, tr3)
 
 Exponential moving average with decay `α = 1/n`:
 
-```
+```text
 pATR[i] = (pATR[i−1] × (n − 1) + pTR[i]) / n,   with n = 10
 ```
 
@@ -204,14 +199,18 @@ The term-structure reasoning (LEARNINGS [L-007](LEARNINGS.md#l-007--multi-timefr
 not the v2 default. `patr_240`/`patr_60` remain available for a deliberate,
 separately reported experiment if B.2 diagnostics motivate it.
 
-### `shift(3)` lag
+### Higher-tf pATR join lag
 
-Higher-timeframe pATR series are lagged by **3 bars of the higher timeframe**
-before being joined onto the 15m decision clock. Prevents current-bar
+Higher-timeframe pATR series are lagged in **bars of the higher timeframe**
+before being joined onto the 15m decision clock. The lag prevents current-bar
 bleed — the guarantee is that no row of the 15m frame sees a
 higher-timeframe pATR value that depends on data from after that row's
-timestamp. v1 design, preserved in **[D-012](DECISIONS.md#d-012--patr-definition-lock)**; exact mechanics of "3 bars of
-which clock" are pending Q4 of PHASE_B.B.0.
+timestamp. The honest arm uses a lag of **1 bar** (`shift_higher_tf_bars = 1`) —
+the last fully-closed higher-tf bar, the minimal leakage-safe lag. The
+v1-faithful arm keeps v1's **3** (`shift(3)`) — leakage-safe but
+over-conservative — runnable through the same parameter. Set and reasoned in
+**[D-012](DECISIONS.md#d-012--patr-definition-lock)** (which also resolves
+PHASE_B.B.0 Q4, "3 bars of which clock").
 
 ---
 
@@ -271,7 +270,7 @@ market-like order, not a passive resting one.
 The standard risk-adjusted return metric. Mean excess return divided by the
 standard deviation of returns, annualized:
 
-```
+```text
 Sharpe = (mean_return − risk_free_rate) / std(returns) × √(periods_per_year)
 ```
 
@@ -286,7 +285,7 @@ A Sharpe variant that penalizes only **downside** volatility. The denominator
 is the standard deviation of returns *below a target* (commonly zero or the
 risk-free rate) instead of all returns:
 
-```
+```text
 Sortino = (mean_return − target) / std(returns_below_target) × √(periods_per_year)
 ```
 
@@ -356,7 +355,7 @@ treat all N samples as independent and are correspondingly too narrow.
 The hit rate at which a strategy with a given reward : risk ratio breaks
 even, **ignoring costs**. For the project's `4 : 2.5` reward : risk:
 
-```
+```text
 breakeven = stop / (target + stop) = 2.5 / (4 + 2.5) ≈ 38.5%
 ```
 

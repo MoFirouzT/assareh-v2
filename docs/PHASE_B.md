@@ -46,8 +46,9 @@ tests/
 
 ## B.0 — Multi-timeframe pATR (prerequisite)
 
-`make_labels` requires the two pATR series attached to the 15m frame. The pATR
-formula is locked ([D-012](DECISIONS.md#d-012--patr-definition-lock)); the multi-timeframe split is locked ([D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available)).
+`make_labels` requires the two pATR series attached to the 15m frame.
+The pATR formula is locked ([D-012](DECISIONS.md#d-012--patr-definition-lock));
+the multi-timeframe split is locked ([D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available)).
 
 ```python
 # src/assareh/features/patr.py
@@ -64,8 +65,9 @@ def attach_patr(
     For each timeframe `tf` in `timeframes_minutes`, computes percent ATR (pATR)
     via Wilder smoothing (window=10), directional true range via the `up_first`
     flag derived from 1m sub-candles within each tf bar, then as-of joins onto
-    the 15m clock. Higher-timeframe pATR series are lagged by v1's `shift(3)`
-    guard before the join — see Q4 below.
+    the 15m clock. Higher-timeframe pATR series are lagged by
+    `shift_higher_tf_bars` bars of the higher tf before the join (D-012:
+    1 = honest, last fully-closed higher-tf bar; 3 = v1-faithful arm).
     """
 ```
 
@@ -75,14 +77,14 @@ barriers, per D-026 revised). `patr_60` / `patr_240` are still computed so the
 optional MTF-asymmetry experiment ([L-007](LEARNINGS.md#l-007--multi-timeframe-atr-term-structure-why-longer-vol-for-target-shorter-vol-for-stop)) can be run without recomputation, but
 they are not consumed by the default label path.
 
-> **Open question — Q4 (`shift(3)` mechanics).** v1's `shift(3)` lag on higher-
-> timeframe pATR is preserved (D-012), but the exact shift unit — 3 bars of the
-> higher tf vs. 3 bars of the 15m clock — has not been pinned in v2. Investigate
-> during B.0 implementation by inspecting v1's `IndicatorEngineer` /
-> `FeatureEngineer`; record the verdict and rationale as a new DECISIONS.md
-> entry before B.0 is marked done. Until then, `attach_patr` must accept a
-> `shift_higher_tf_bars: int = 3` parameter that is **explicitly applied in the
-> higher tf** as the working hypothesis.
+> **Q4 (`shift(3)` mechanics) — RESOLVED in [D-012](DECISIONS.md#d-012--patr-definition-lock).**
+> The shift unit is **bars of the higher tf** (not the 15m clock), and the lag
+> is **1 bar** — the last fully-closed higher-tf bar, the minimal leakage-safe
+> lag. `attach_patr` takes `shift_higher_tf_bars: int = 1` (honest arm), applied
+> in the higher tf. v1's value **3** (`shift(3)`) is leakage-safe but
+> over-conservative; it is **retained as the v1-faithful arm** via the same
+> parameter. (A 15m-clock lag is rejected — 3 × 15m < 60m would leave
+> `patr_60`/`patr_240` partially-formed and leaky.)
 
 ### B.0 Tests
 
@@ -100,7 +102,7 @@ they are not consumed by the default label path.
 ### B.0 Definition of done
 
 - `attach_patr` returns the canonical three pATR columns on the 15m frame
-- Tests pass; Q4 resolution is committed to DECISIONS.md
+- Tests pass; Q4 resolution folded into [D-012](DECISIONS.md#d-012--patr-definition-lock) (lag = 1 higher-tf bar)
 - [D-012](DECISIONS.md#d-012--patr-definition-lock), [D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available) reflected; module path matches the layout above
 
 ---
@@ -681,7 +683,7 @@ output exists. They are now fixed.
   ([L-008](LEARNINGS.md#l-008--v1s-default-gap-interpolation-is-non-causal-and-contaminates-labels), [L-010](LEARNINGS.md#l-010--v1s-patr-series-is-ffillbfilld-inside-targetextractor23)); [D-037](DECISIONS.md#d-037--feature-frame-nan-policy-leakage-probe) and [D-039](DECISIONS.md#d-039--cross-timeframe-alignment-method-leakage-probe) are Phase D concerns and remain Proposed-but-
   not-yet-implemented at the B checkpoint
 - LEARNINGS.md updated with the target diagnostics, the same-bar ambiguity rate
-  at both grains, the Q4 `shift(3)` verdict from B.0, and the embargo
+  at both grains, the Q4 join-lag verdict from B.0 ([D-012](DECISIONS.md#d-012--patr-definition-lock)), and the embargo
   leakage-probe delta if run
 - `attach_patr`, `make_labels`, `make_walkforward_folds`, `average_uniqueness`
   and their tests committed and green

@@ -286,8 +286,9 @@ built in.
 
 **The leakage trap to watch:** any indicator that uses a "lookback that includes
 the current bar's close" combined with a target that depends on the current
-bar's close. Easy to miss, fatal if wrong. (v1's `shift(3)` on higher-timeframe
-pATR is the existing guard — keep it.)
+bar's close. Easy to miss, fatal if wrong. (The higher-timeframe pATR join lag
+is the guard here; v1 used `shift(3)`, v2 uses the minimal leakage-safe lag of 1
+higher-tf bar — see [D-012](DECISIONS.md#d-012--patr-definition-lock).)
 
 ---
 
@@ -420,9 +421,10 @@ experiments is cheap.
   follow-on-iteration plans when this iteration completes.
 - `PHASE_A.md`, `PHASE_B.md`, … — per-phase breakdowns, written just ahead of
   starting each phase.
-- `DECISIONS.md` — append-only log of design decisions. Updated in the same
-  commit as the code implementing the decision. Each entry records the verdict,
-  the rationale, and the v1 alternative.
+- `DECISIONS.md` — living record of design decisions (revisable; entries may be
+  changed or removed as the project evolves). Updated in the same commit as the
+  code implementing the decision. Each entry records the verdict, the rationale,
+  and the v1 alternative.
 - `LEARNINGS.md` — append-only log of findings, surprises, bugs, dead ends.
 - `CLAUDE.md` — repo root, picked up by Claude Code. Project conventions,
   hard rules (never random-split time series, always walk-forward, etc.).

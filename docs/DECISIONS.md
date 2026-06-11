@@ -1,6 +1,9 @@
 # DECISIONS
 
-This file is the append-only log of design decisions.
+This file is the living record of the project's design decisions. Entries are
+normally added as decisions are made, but may be revised or removed as the
+project evolves — prefer marking an entry `Superseded` with a pointer when the
+history matters, but outright deletion is allowed.
 
 **Status taxonomy:** `Accepted` · `Proposed` · `Rejected` · `Superseded`.
 Qualifiers (e.g. "compute-gated", "governing", "this iteration only") live in the
@@ -370,32 +373,48 @@ first line of the decision body, not in the status field.
 ## D-012 — pATR definition lock
 
 - **Date:** 2026-05-22 — **Phase:** B — **Status:** Accepted
-- **Decision.** Adopt v1's **percent ATR** (pATR) exactly: Wilder smoothing
-  with window 10, directional true range via the `up_first` flag derived
-  from 1m sub-candles, and the `shift(3)` lag on higher-timeframe pATR.
-  Lock the formula; no changes. Definition, `pTR` formula, Wilder
-  recurrence, and `up_first` mechanics live in
-  [`GLOSSARY.md`](GLOSSARY.md).
-- **v1 behavior.** Identical (this is v1's design).
-- **Verdict.** Adopt (no change).
-- **Rationale.** Well-constructed and already leakage-aware (completed bars
-  only; `shift(3)` prevents current-bar bleed). It is also the same 1m
-  machinery [D-006](#d-006--barrier-touch-resolution-source) relies on. No reason to alter it.
-- **Recorded alternative.** A standard (non-directional) ATR — would break
-  comparability and discard a sound design; not used.
+- **Decision.**
+  Adopt v1's **percent ATR** (pATR) formula exactly — Wilder smoothing with
+  window 10, directional true range via the `up_first` flag derived from 1m
+  sub-candles. Lock the formula (Wilder/`pTR`/`up_first`); no changes.
+  Definition, `pTR` formula, Wilder recurrence, and `up_first` mechanics live in [`GLOSSARY.md`](GLOSSARY.md).
+- **Higher-tf join lag (resolves Q4).**
+  Before higher-timeframe pATR is joined onto the 15m decision clock it is
+  lagged by **1 bar of the higher timeframe** — the join uses the most recent
+  *fully-closed* higher-tf bar at each 15m timestamp (`shift_higher_tf_bars = 1`,
+  applied in the higher tf). This is the **minimal leakage-safe lag**: the only
+  hazard is joining a pATR whose 1m sub-candles extend past `t`, and the last
+  bar that closed at or before `t` removes it completely (the bar is fully
+  formed; nothing in it postdates `t`). The lag unit is higher-tf bars, **not**
+  the 15m clock — a 15m-clock lag under-covers the longer frames (3 × 15m =
+  45m < 60m would leave `patr_60`/`patr_240` partially-formed and leaky).
+  The honest arm uses 1. v1's `shift(3)` is leakage-safe but over-conservative
+  (lagging 3 discards 2 extra closed bars, e.g. 8h stale on `patr_240`, for no
+  leakage benefit); it is **retained as the v1-faithful arm** —
+  `shift_higher_tf_bars = 3`, runnable through the same harness per
+  [D-001](#d-001--dual-arm-methodology-governing-rule). The gap between the two
+  lags is a finding.
+- **v1 behavior.** Formula identical (this is v1's design); v1's higher-tf lag
+  was `shift(3)` — kept as the v1-faithful arm.
+- **Verdict.** Adopt the formula unchanged; honest arm sets the join lag to the
+  minimal leakage-safe value (1), v1-faithful arm keeps v1's 3.
+- **Recorded alternative.** (a) A standard (non-directional) ATR — would break
+  comparability and discard a sound design; not used. (b) A 15m-clock lag —
+  rejected outright as leaky for `patr_60`/`patr_240`.
 - **Estimator-faithfulness note (2026-05-25).** López de Prado's reference
   sets the volatility target `trgt` to an **EWMA standard deviation of
-  close-to-close returns**, not to ATR. ATR is a different (though closely
-  related) estimator. We deliberately **retain** v1's pATR for faithfulness;
-  the EWMA-of-returns alternative is noted and **not adopted**. No
-  methodology conflict — only an explicit acknowledgment that `trgt ≡ pATR`
+  close-to-close returns**, not to ATR.
+  ATR is a different (though closely related) estimator.
+  We deliberately **retain** v1's pATR for faithfulness;
+  the EWMA-of-returns alternative is noted and **not adopted**.
+  No methodology conflict — only an explicit acknowledgment that `trgt ≡ pATR`
   is a chosen estimator, not the book's default.
 - **See also.** [`GLOSSARY.md`](GLOSSARY.md) →
   [pATR](GLOSSARY.md#patr-percent-atr) ·
   [pTR](GLOSSARY.md#ptr-percent-true-range) ·
   [Wilder smoothing](GLOSSARY.md#wilder-smoothing) ·
   [`up_first` flag](GLOSSARY.md#up_first-flag) ·
-  [`shift(3)` lag](GLOSSARY.md#shift3-lag).
+  [higher-tf join lag](GLOSSARY.md#higher-tf-patr-join-lag).
 
 ## D-013 — Feature-selection scope
 
