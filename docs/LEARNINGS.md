@@ -789,3 +789,60 @@ not apples-to-apples.
   "what was *labeled* ≠ what was *trained on*." The label frame carries every bar;
   the population that produced v1's metrics was decided one layer down, in the
   loader. Pin the comparison to the trained-on population, not the label table.
+
+---
+
+## L-020 — Honest-arm target diagnostics on real data (B.2): the three-class skew is the payoff, and +28% positive ≠ v1's reported 9.3%
+
+**Discovered:** B.2 — `target_stats` over the full BTC/USDT history
+(307,205 fifteen-minute decisions, 304,962 complete) with the v2 honest default
+labeler: `horizon_bars=48`, `m_target=4`, `m_stop=2.5`, both barriers on 15m pATR,
+`resolution="1m"`, `gap_fill="observed"`, `patr_fill="realised_only"`.
+
+**Three-class split:** `+1 = 28.2%`, `0 (no-touch) = 20.4%`, `−1 = 51.4%`.
+
+- **Timeout (no-touch) rate = 20.4%** — a statistic v1 never logged. At the
+  48-bar horizon roughly four in five decisions resolve at a barrier before
+  timing out.
+- **`−1` dominates `+1` (~1.8×) by construction, not market bias.** The stop sits
+  at `2.5×pATR` and the target at `4×pATR`, so the nearer barrier (the stop) is
+  reached first more often. The skew is a property of the asymmetric payoff; the
+  38.5% breakeven ([D-007](DECISIONS.md#d-007--breakeven-reference-385-not-50)) is exactly the rate that neutralizes it. Reading
+  `+1` share as a directional signal would be a mistake.
+- **Per-quarter positive rate is stable: ~24–34%** across 2017Q3–2026Q2 (lowest in
+  the thin early-2017 data, where no-touch also runs high at ~34%). Crypto regimes
+  move it less than the PHASE_B B.2 prior expected — no quarter collapses or
+  spikes. No-touch trends down over time (~34% → ~17%) as data density and
+  volatility-relative barrier tightness shift.
+
+**Label overlap (sets B.3 / D-004 expectations):** median forward distance to
+first touch = **15 bars (~3.75 h)**, mean 17.5; median span including timeouts =
+**20 bars (~5 h)**. So a typical label occupies ~15–20 fifteen-minute bars
+forward — overlap is moderate and *far* milder than v1's 511-bar horizon, which
+is why the `N_eff` shrink (B.3) should be smaller than earlier drafts assumed
+([D-005](DECISIONS.md#d-005--sample-uniqueness-weighting)).
+
+**Same-bar ambiguity is tiny:** 15m rate **0.19%**, 1m rate **0.02%**
+([D-006](DECISIONS.md#d-006--barrier-touch-resolution-source)). So the honest-vs-v1 *barrier-resolution* divergence is bounded
+small at the label level — whatever inflation the gap artifact (Phase E) finds in
+the v1-faithful arm will come mostly from horizon, the qualified filter
+([D-041](DECISIONS.md#d-041--v1-faithful-qualified-sample-filter-trend-residual-gate)),
+and the gap/pATR fills, not from same-bar tie-breaking.
+
+**The +28% vs v1's ~9.3% positive gap — flagged, not reconciled.** PHASE_B B.2
+expected to "confirm v1's ~9.3% positive." The honest arm is nowhere near that.
+Plausible drivers, all to be isolated by the Phase E gap artifact rather than
+guessed at now: (a) horizon 48 vs v1's 511; (b) our `4 / 2.5` vs the
+`m_pt=1+√5, m_ps=2, m_nt=950` of v1's `TargetExtractor3` ([L-017](#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs)); (c) v1's
+`qualified == 1` subset (D-041); (d) v1's open-labeled 15m-optimistic resolution;
+(e) whether v1's "9.3%" was `target3` (post-qualified meta-label) rather than
+`rt3`. Per the [[feedback_v1_faithful_callsites]] discipline this is logged as a
+discrepancy to measure under the v1-faithful arm, not evidence that either side
+is "wrong."
+
+**Performance aside.** `make_labels` over all 307K decisions at horizon 48 runs in
+**~1.9 s** — the per-decision numpy first-touch loop is not a bottleneck. The
+PHASE_B "~2.3 B lookups, unacceptably slow" warning only applies at the 511-bar
+v1-faithful horizon (~16× the window); the fully-vectorized join-asof form stays a
+*conditional* optimization for that arm, not a prerequisite for the honest
+default.
