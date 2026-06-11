@@ -37,15 +37,15 @@ The category is fixed when the decision is accepted:
   Used when the v1 choice is a defect, not a design alternative.
   Members fall into two sub-groups:
   - *Statistical-discipline probes:*
-    D-004 embargo, D-006 barrier-touch resolution, D-010 walk-forward geometry, D-013 feature-selection scope.
-  - *Data-handling probes* (surfaced by the v1 audit, L-008–L-011):
-    D-036 gap-fill discipline, D-037 feature-frame NaN policy, D-038 pATR fill policy, D-039 cross-timeframe alignment method.
+    [D-004](DECISIONS.md#d-004) embargo, [D-006](DECISIONS.md#d-006) barrier-touch resolution, [D-010](DECISIONS.md#d-010) walk-forward geometry, [D-013](DECISIONS.md#d-013) feature-selection scope.
+  - *Data-handling probes* (surfaced by the v1 audit, [L-008](LEARNINGS.md#l-008)–[L-011](LEARNINGS.md#l-011)):
+    [D-036](DECISIONS.md#d-036) gap-fill discipline, [D-037](DECISIONS.md#d-037) feature-frame NaN policy, [D-038](DECISIONS.md#d-038) pATR fill policy, [D-039](DECISIONS.md#d-039) cross-timeframe alignment method.
   Their inflations are the cells of the Phase E gap artifact.
 - **Retained comparison arms** —
   both arms run every fold, every evaluation, indefinitely.
   Used when the v1 choice is a defensible design alternative, not a leak.
   Members:
-  D-009 loss function (combined MSE+MAE vs. class-weighted BCE/focal), D-011 cost model (gross v1-faithful vs. net honest, reported as gross/net metric pairs).
+  [D-009](DECISIONS.md#d-009) loss function (combined MSE+MAE vs. class-weighted BCE/focal), [D-011](DECISIONS.md#d-011) cost model (gross v1-faithful vs. net honest, reported as gross/net metric pairs).
   These do not retire;
   the gap they expose is a modeling trade-off, not a leak.
 
@@ -86,58 +86,58 @@ Define the prediction target rigorously, design walk-forward splits
 that respect the temporal structure *and* the label horizon, and lock in the
 evaluation-harness skeleton *before* writing any model.
 
-**Exit criteria:** label modules, splits, and held-out reservation tested; D-008 Stage 1 (threshold structure) appended; D-014 ratification queued for Phase E; **D-040 (qualified-event filter) resolved to Accepted/Rejected**; B-phase decision entries in DECISIONS.md.
+**Exit criteria:** label modules, splits, and held-out reservation tested; [D-008](DECISIONS.md#d-008) Stage 1 (threshold structure) appended; [D-014](DECISIONS.md#d-014) ratification queued for Phase E; **[D-040](DECISIONS.md#d-040) (qualified-event filter) resolved to Accepted/Rejected**; B-phase decision entries in DECISIONS.md.
 
 **Key deliverables:**
 
-- **Multi-timeframe [pATR](GLOSSARY.md#patr-percent-atr) module** (`features/patr.py`) producing `patr_15`,
+- **Multi-timeframe [pATR](GLOSSARY.md#patr) module** (`features/patr.py`) producing `patr_15`,
   `patr_60`, `patr_240` on the 15m clock — prerequisite for B.1
-  (D-012, D-026, D-031)
+  ([D-012](DECISIONS.md#d-012), [D-026](DECISIONS.md#d-026), [D-031](DECISIONS.md#d-031))
 - Triple-barrier target function with tests — **1m-resolved barrier ordering
   primary** (honest arm), 15m-optimistic ordering retained as the v1-faithful
-  comparison arm (D-006). Barriers anchored on the 15m close (D-027); 1m
-  intra-bar tie-break by `close > open` direction (D-028); **both barriers use
+  comparison arm ([D-006](DECISIONS.md#d-006)). Barriers anchored on the 15m close ([D-027](DECISIONS.md#d-027)); 1m
+  intra-bar tie-break by `close > open` direction ([D-028](DECISIONS.md#d-028)); **both barriers use
   15m pATR** by default (D-026 revised — friend's recommendation + the inspected
   v1 config; MTF asymmetry kept available, off by default); horizon defaults to
-  ~48 bars (two-TF-higher rule, D-003; 511 reproduces v1)
+  ~48 bars (two-TF-higher rule, [D-003](DECISIONS.md#d-003); 511 reproduces v1)
 - **Data-handling leakage probes wired into label construction**
-  (L-008, L-010). The v1-faithful labeling arm additionally reproduces
+  ([L-008](LEARNINGS.md#l-008), [L-010](LEARNINGS.md#l-010)). The v1-faithful labeling arm additionally reproduces
   *(i)* v1's non-causal `LinearInterpolator` gap fill on the 1m
-  resolution substrate before barrier walking (D-036) and
+  resolution substrate before barrier walking ([D-036](DECISIONS.md#d-036)) and
   *(ii)* the `patr*.fillna('ffill').fillna('bfill')` chain inside
-  `TargetExtractor` (D-038). The honest arm leaves gaps observed (D-024)
+  `TargetExtractor` ([D-038](DECISIONS.md#d-038)). The honest arm leaves gaps observed ([D-024](DECISIONS.md#d-024))
   and uses only pATR realised at or before `t`; bars where either is
-  unresolvable emit typed-null labels (D-029) rather than fabricated ones
+  unresolvable emit typed-null labels ([D-029](DECISIONS.md#d-029)) rather than fabricated ones
 - **Side label only (D-014 gate).** `make_labels` returns `rt3`, the three-class
   side label. v1's embedded `target2`/`target3`/`stop2` meta-label path is **not
-  reproduced** — it was a discarded v1 experiment (L-006 corrected, L-017).
+  reproduced** — it was a discarded v1 experiment ([L-006](LEARNINGS.md#l-006) corrected, [L-017](LEARNINGS.md#l-017)).
   Learned meta-labeling is a *new* v2 idea (D-014): whether a separate meta-model
   is trained on top of `rt3` in Phase E is **D-014's open question, ratified
   before Phase E begins**
 - **Resolve v1's qualified-event filter (D-040, open).** v1 ran `consider_res=True`
   (a `qualified` flag from trend-residual columns gating labeling events). Decide
   before B.1 is locked whether the v1-faithful arm reproduces it and whether the
-  honest arm carries a `qualified` column; until then the default is D-002's
+  honest arm carries a `qualified` column; until then the default is [D-002](DECISIONS.md#d-002)'s
   unqualified per-15m-close cadence (L-017, D-040)
 - `LabelResult` as a single Polars DataFrame on the 15m decision clock with
   typed-null tail sentinels (D-029); per-arm same-bar ambiguity rates logged
   at both 15m and 1m grain
 - Documented target statistics: positive rate, **timeout (no-touch) rate**,
   distribution over time, regime shifts; the **38.5% breakeven reference**
-  (cost-free) written down explicitly (D-007); the cost-adjusted variant
-  lands at the C/D handoff once D-011's cost model is fixed, feeding the
+  (cost-free) written down explicitly ([D-007](DECISIONS.md#d-007)); the cost-adjusted variant
+  lands at the C/D handoff once [D-011](DECISIONS.md#d-011)'s cost model is fixed, feeding the
   success threshold's Stage 2 (below)
 - Walk-forward CV scheme implemented and tested, with **purging + embargo
   (embargo = `horizon_bars`, the full label horizon — 48 by default, 511
-  v1-faithful)** (D-004), concretely sized
+  v1-faithful)** ([D-004](DECISIONS.md#d-004)), concretely sized
   to **8 folds, ~2y initial anchor, ~1 quarter test per fold, ~6w val per
-  fold** (D-010 added detail); the v1 single 75/15/10 chronological split
+  fold** ([D-010](DECISIONS.md#d-010) added detail); the v1 single 75/15/10 chronological split
   retained as a comparison configuration; `cpcv` scheme value reserved in
-  the splits API for Phase C (D-016)
+  the splits API for Phase C ([D-016](DECISIONS.md#d-016))
 - **Sample-uniqueness weighting** (López de Prado average uniqueness,
   computed on training-fold labels only) layered on top of v1's
   class-imbalance weights, renormalized per fold to sum to `N`; **Kish-N_eff**
-  for confidence intervals on test metrics; no time decay (D-005, D-017)
+  for confidence intervals on test metrics; no time decay ([D-005](DECISIONS.md#d-005), [D-017](DECISIONS.md#d-017))
 - A `splits.py` module that's the single source of truth for what's train,
   val, and test for every fold
 - **Held-out test window reservation** (VISION deferred decision). A
@@ -153,7 +153,7 @@ evaluation-harness skeleton *before* writing any model.
   **Stage 1 — structure** (end of Phase B, before D begins) locks the
   rule shape — net-of-cost precision above the cost-adjusted breakeven
   with an `N_eff`-based CI excluding it, on **at least 5 of 8** test folds,
-  with **[DSR](GLOSSARY.md#deflated-sharpe-ratio-dsr) > 0.95** and
+  with **[DSR](GLOSSARY.md#dsr) > 0.95** and
   **PBO < 0.2** (PBO not yet in GLOSSARY — Bailey & López de Prado 2014,
   CSCV).
   **Stage 2 — values** (C/D handoff, before any model is fit in E) locks
@@ -161,7 +161,7 @@ evaluation-harness skeleton *before* writing any model.
   and the `V` source per D-016 (reduced-config CPCV if implemented,
   trial-set estimator over `folds × dual arms × baselines` as the recorded
   fallback). Both stages appended to D-008
-- Decision-log entries D-027 … D-033 reflecting the new B-phase choices
+- Decision-log entries D-027 … [D-033](DECISIONS.md#d-033) reflecting the new B-phase choices
   (entry-price convention, intra-bar tie-break, `LabelResult` schema, module
   layout, pATR module location, `label_spans` representation, forward-walk
   vectorization)
@@ -173,7 +173,7 @@ evaluation-harness skeleton *before* writing any model.
   leakage-sensitive code paths (labels, splits, weights) merge. Workflow
   file: `.github/workflows/ci.yml`
 
-**Out of scope for this iteration:** CUSUM event filter (D-015 — Rejected; revisit
+**Out of scope for this iteration:** CUSUM event filter ([D-015](DECISIONS.md#d-015) — Rejected; revisit
 in a follow-on iteration). CPCV implementation lands in Phase C (D-016).
 
 **Learning component:** read López de Prado **chapters 3 (labeling), 4 (sample weights / uniqueness), and 7 (cross-validation in finance)** before implementing, plus a skim of **chapters 11–12 (backtest overfitting, CSCV/PBO, Deflated Sharpe Ratio)** to inform the success threshold and reporting.
@@ -188,15 +188,15 @@ See `PHASE_B.md` for the full breakdown.
 **Goal:** Build the evaluation harness against which everything will be measured.
 Baselines first, model later — this is the methodology checkpoint.
 
-**Exit criteria:** `evaluate()` runs all four baselines under every probe arm; per-arm parquet schema validated end-to-end on baseline output; D-008 Stage 2 (cost-adjusted breakeven value + `V` source) appended; D-016 CPCV verdict (implement or drop) recorded.
+**Exit criteria:** `evaluate()` runs all four baselines under every probe arm; per-arm parquet schema validated end-to-end on baseline output; [D-008](DECISIONS.md#d-008) Stage 2 (cost-adjusted breakeven value + `V` source) appended; [D-016](DECISIONS.md#d-016) CPCV verdict (implement or drop) recorded.
 
 **Key deliverables:**
 
 - Vectorized backtest function: takes signals + prices + cost assumptions,
   returns equity curve and metrics. Fills resolved on **1m** (consistent
-  with the primary label arm, D-006); both **gross and net** P&L reported
+  with the primary label arm, [D-006](DECISIONS.md#d-006)); both **gross and net** P&L reported
   (gross lines up with v1, net is the honest number)
-- Cost model (D-011): taker fee + slippage cushion sized to sub-1m touch
+- Cost model ([D-011](DECISIONS.md#d-011)): taker fee + slippage cushion sized to sub-1m touch
   ambiguity (v1 had none — gross-only is therefore the v1-faithful arm
   here; gross/net pair retained per the dual-arm catalogue above)
 - Metrics module: precision-at-threshold (referenced to the 38.5% breakeven,
@@ -224,14 +224,14 @@ Baselines first, model later — this is the methodology checkpoint.
   - **Frequency-matched random signal** — same trade count as the model, run
     through the same cost model; the real "is there an edge" control
 - Baseline numbers logged to MLflow (local file backend), with the same
-  label-overlap-aware Kish-`N_eff` CIs (D-005) applied to baseline metrics
+  label-overlap-aware Kish-`N_eff` CIs ([D-005](DECISIONS.md#d-005)) applied to baseline metrics
   as to model metrics — comparability with VISION DoD #4 requires
   apples-to-apples CIs
 - **Per-arm metric record schema** (enables the Phase E headline finding).
   Every metric is emitted as a row
   `(arm_id, fold, metric_name, value, n_eff, ci_lo, ci_hi)`. The four
-  leakage-probe arms (D-004 embargo, D-006 barrier resolution, D-010
-  geometry, D-013 feature scope) share the honest arm's `metric_name` set,
+  leakage-probe arms ([D-004](DECISIONS.md#d-004) embargo, D-006 barrier resolution, [D-010](DECISIONS.md#d-010)
+  geometry, [D-013](DECISIONS.md#d-013) feature scope) share the honest arm's `metric_name` set,
   so the honest-vs-v1 gap is computed as a join on `(fold, metric_name)`
   rather than a re-derivation. Prevents the gap math from silently
   reweighting or redefining anything.
@@ -239,11 +239,11 @@ Baselines first, model later — this is the methodology checkpoint.
   `arm` selects which configuration is active across the full dual-arm
   catalogue — **8 leakage probes** (statistical-discipline: D-004
   embargo, D-006 barrier-touch resolution, D-010 walk-forward geometry,
-  D-013 feature-selection scope; data-handling: D-036 gap-fill, D-037
-  NaN policy, D-038 pATR fill, D-039 cross-TF alignment) plus **2
-  retained comparison arms** (D-009 loss function, D-011 cost model
+  D-013 feature-selection scope; data-handling: [D-036](DECISIONS.md#d-036) gap-fill, [D-037](DECISIONS.md#d-037)
+  NaN policy, [D-038](DECISIONS.md#d-038) pATR fill, [D-039](DECISIONS.md#d-039) cross-TF alignment) plus **2
+  retained comparison arms** ([D-009](DECISIONS.md#d-009) loss function, D-011 cost model
   gross/net). A single call site drives every arm — the runtime form of
-  the D-001 governing rule
+  the [D-001](DECISIONS.md#d-001) governing rule
 
 **Why this comes before the model:** if the harness is wrong, every number that
 follows is meaningless. Building it on baselines forces the interface to be
@@ -271,14 +271,14 @@ built in.
   val/test
 - Feature selection: Pearson correlation filter (0.95) + MI ranking as in v1,
   but **rerun per fold on training rows only** (honest arm); v1's single global
-  selection on 90% of data retained as a **selection-leakage probe** (D-013)
+  selection on 90% of data retained as a **selection-leakage probe** ([D-013](DECISIONS.md#d-013))
 - **Data-handling leakage probes wired into feature assembly**
-  (L-008, L-009, L-011). The v1-faithful feature arm additionally
+  ([L-008](LEARNINGS.md#l-008), [L-009](LEARNINGS.md#l-009), [L-011](LEARNINGS.md#l-011)). The v1-faithful feature arm additionally
   reproduces *(i)* v1's non-causal `LinearInterpolator` gap fill on
-  every input timeframe before indicator compute (D-036, downstream
+  every input timeframe before indicator compute ([D-036](DECISIONS.md#d-036), downstream
   side), *(ii)* the blanket `DataMixer.*.load_features` `bfill` on the
-  assembled feature frame (D-037), and *(iii)* the
-  `DataMixer3._mix_train` counter-walked multi-TF mix (D-039) in place of
+  assembled feature frame ([D-037](DECISIONS.md#d-037)), and *(iii)* the
+  `DataMixer3._mix_train` counter-walked multi-TF mix ([D-039](DECISIONS.md#d-039)) in place of
   the `merge_asof` join above. The honest arm leaves NaN cells untouched
   and excludes affected rows in the batch sampler
 - Sample tensor matching v1's `(batch, 1, 21, 220)` shape
@@ -298,7 +298,7 @@ pATR is the existing guard — keep it.)
 **Goal:** Rebuild the production `ConvWideDeepLSTMNet` cleanly, train it under
 walk-forward CV, evaluate it against baselines under the harness.
 
-**Exit criteria:** D-014 verdict appended; gap artifact written to `reports/gap.parquet`; success-threshold check executed and the verdict (pass / null) recorded; aggregate per-arm metrics logged to MLflow.
+**Exit criteria:** [D-014](DECISIONS.md#d-014) verdict appended; gap artifact written to `reports/gap.parquet`; success-threshold check executed and the verdict (pass / null) recorded; aggregate per-arm metrics logged to MLflow.
 
 **Gate before any model is fit — D-014 ratification.**
 Resolve whether this iteration includes meta-labeling. Two paths:
@@ -307,15 +307,15 @@ Resolve whether this iteration includes meta-labeling. Two paths:
   position (`ŝ_t ≠ 0`), trained on the **derived** meta-label
   `m_t = 1[ŝ_t = rt3_t]` (was the primary's call correct) — computed at train
   time from `rt3`, *not* read from a v1 `target3` column (which is no longer
-  produced; L-006 corrected, L-017). Action threshold = cost-adjusted breakeven
-  (D-007); sizing by conviction above breakeven (de Prado's probability→size map,
+  produced; [L-006](LEARNINGS.md#l-006) corrected, [L-017](LEARNINGS.md#l-017)). Action threshold = cost-adjusted breakeven
+  ([D-007](DECISIONS.md#d-007)); sizing by conviction above breakeven (de Prado's probability→size map,
   recentred on breakeven, not 0.5). Primary tuned for recall, meta-model supplies
   precision.
 - **Deferred (follow-on iteration).** No meta-model this iteration. Phase E's
   directional collapse (`rt3 → {long, no-trade, short}` with `0` folded into
-  "no-trade") carries the iteration. D-009's loss arms remain the dual-arm.
+  "no-trade") carries the iteration. [D-009](DECISIONS.md#d-009)'s loss arms remain the dual-arm.
 
-The verdict is appended to D-014 (Proposed → Accepted or Superseded) and to D-008's Stage 2 commit, before any model is fit.
+The verdict is appended to D-014 (Proposed → Accepted or Superseded) and to [D-008](DECISIONS.md#d-008)'s Stage 2 commit, before any model is fit.
 
 **Key deliverables:**
 
@@ -336,11 +336,11 @@ The verdict is appended to D-014 (Proposed → Accepted or Superseded) and to D-
   finding per VISION DoD #5. A table with one row per leakage discipline
   and one column per headline metric (net-of-cost precision-at-threshold,
   net P&L, DSR), grouped into two sub-blocks:
-  - *Statistical-discipline probes:* D-004 embargo, D-006 barrier
-    resolution, D-010 walk-forward geometry, D-013 feature-selection
+  - *Statistical-discipline probes:* [D-004](DECISIONS.md#d-004) embargo, [D-006](DECISIONS.md#d-006) barrier
+    resolution, [D-010](DECISIONS.md#d-010) walk-forward geometry, [D-013](DECISIONS.md#d-013) feature-selection
     scope.
-  - *Data-handling probes:* D-036 gap-fill discipline, D-037
-    feature-frame NaN policy, D-038 pATR fill policy, D-039
+  - *Data-handling probes:* [D-036](DECISIONS.md#d-036) gap-fill discipline, [D-037](DECISIONS.md#d-037)
+    feature-frame NaN policy, [D-038](DECISIONS.md#d-038) pATR fill policy, [D-039](DECISIONS.md#d-039)
     cross-timeframe alignment method.
 
   Each cell holds `v1_faithful − honest` with a label-overlap-aware
