@@ -52,7 +52,7 @@ first line of the decision body, not in the status field.
 
 ## D-001 — Dual-arm methodology (governing rule)
 
-- **Date:** 2026-05-22 — **Phase:** B (applies B→F) — **Status:** Accepted
+- **Phase:** B (applies B→F) — **Status:** Accepted
 - **Decision.** Wherever v1 made a choice we want to improve on, keep **two
   arms**: a *v1-faithful* arm that reproduces v1 exactly (so comparison to v1's
   reported numbers is valid) and an *honest* arm that is methodologically
@@ -73,7 +73,7 @@ first line of the decision body, not in the status field.
 
 ## D-002 — Decision cadence: 15m bar close
 
-- **Date:** 2026-05-22 — **Phase:** B — **Status:** Accepted
+- **Phase:** B — **Status:** Accepted
 - **Decision.** One prediction/label per **15m** bar close. 1m is the inference-
   timing and barrier-resolution substrate; 4h/1h are auxiliary feature inputs,
   not decision clocks.
@@ -87,7 +87,7 @@ first line of the decision body, not in the status field.
 
 ## D-003 — Vertical barrier: horizon length and no-touch handling
 
-- **Date:** 2026-05-22 — **Phase:** B — **Status:** Accepted
+- **Phase:** B — **Status:** Accepted
 - **Decision.** Horizon `n = 16 × 16 × 2 − 1 = 511` 15m bars (≈ 5.3 days),
   matching v1's `TargetExtractor3`. Three-class label `{-1, 0, +1}`; **no-touch
   within the horizon → `0`**. Add **timeout-rate logging** (fraction labeled `0`
@@ -105,7 +105,7 @@ first line of the decision body, not in the status field.
 - **Recorded alternative.** Drop no-touch samples, or label them `−1` for a
   strictly binary target — would change the base rate; not used, but noted as a
   sensitivity to revisit if the `0` class dominates.
-- **Added detail (2026-05-25).** A *third* no-touch option exists beyond the two
+- **Added detail.** A *third* no-touch option exists beyond the two
   recorded alternatives: de Prado's `getBins` relabels vertical-barrier touches
   by the **sign of the return at the horizon**, eliminating the `0` class.
   Explicitly **rejected** — it manufactures ±1 labels from non-events (a flat
@@ -113,7 +113,7 @@ first line of the decision body, not in the status field.
   project avoids. The open head-architecture question (three-class vs. binary) is
   resolved by **[D-014](#d-014--meta-labeling-side--size-decomposition) (meta-labeling)**: the primary model predicts side and a
   binary meta-model absorbs the `0` class as "don't act."
-- **Added detail (2026-06-09) — horizon length changed: default ≈ 48 bars,
+- **Added detail — horizon length changed: default ≈ 48 bars,
   511 reserved for v1-faithful reproduction.** v1's `TargetExtractor3` used
   `n = 16 × 16 × 2 − 1 = 511` 15m bars (~5.3 days) as the vertical barrier
   (`btc_feature_engineering_utils.py:1080`). A friend who worked on v1 advises
@@ -132,7 +132,7 @@ first line of the decision body, not in the status field.
 
 ## D-004 — Embargo and purging
 
-- **Date:** 2026-05-22 — **Phase:** B — **Status:** Accepted
+- **Phase:** B — **Status:** Accepted
 - **Decision.** Purge any training sample whose 511-bar label-outcome window
   overlaps the test fold, and embargo a buffer of **≥ 511 bars** (default =
   full horizon) on the test-adjacent side. Run the honest geometry once with
@@ -146,7 +146,7 @@ first line of the decision body, not in the status field.
   remedy (LdP ch. 7).
 - **Recorded alternative.** v1's feature-only overlap (embargo = 0). Retained
   solely as the probe configuration; not a co-equal default.
-- **Added detail (2026-05-25).** Purge and embargo remove **two distinct leaks**.
+- **Added detail.** Purge and embargo remove **two distinct leaks**.
   *Purging* removes training labels whose outcome **window** overlaps the test
   span (an outcome leak). *Embargo* removes a post-test buffer to kill
   **serial-correlation** leakage that purging cannot see — a label whose window
@@ -159,7 +159,7 @@ first line of the decision body, not in the status field.
   length is pinned to the **active horizon**, deliberately stronger than LdP's
   "~1% of observations" heuristic, because the horizon is the true dependence
   timescale here.
-- **Note (2026-06-09).** The "511" figures throughout this entry describe the
+- **Note.** The "511" figures throughout this entry describe the
   **v1-faithful** horizon. Per [D-003](#d-003--vertical-barrier-horizon-length-and-no-touch-handling) (added detail) the v2 default horizon is now
   **48 bars**, so the default purge window and embargo are **48**, not 511 —
   embargo = `horizon_bars` regardless of which value is active. The 511 numbers
@@ -167,7 +167,7 @@ first line of the decision body, not in the status field.
 
 ## D-005 — Sample-uniqueness weighting
 
-- **Date:** 2026-05-22 — **Phase:** B — **Status:** Accepted
+- **Phase:** B — **Status:** Accepted
 - **Decision.** Keep v1's class-imbalance weights **and** multiply in
   average-uniqueness weights (LdP ch. 4): `weight = class × uniqueness`. Compute
   effective sample size `N_eff` and use it for confidence intervals on test
@@ -181,7 +181,7 @@ first line of the decision body, not in the status field.
   cleanly; v1's class weights are kept, not discarded.
 - **Recorded alternative.** Class weights only (v1) — kept as the inner factor;
   uniqueness layered on top.
-- **Added detail (2026-05-25).** Definitions to lock. Concurrency
+- **Added detail.** Definitions to lock. Concurrency
   `c_t = Σ_i 1[t_{i,0} ≤ t ≤ t_{i,1}]`. Average uniqueness
   `ū_i = (1/|window_i|) · Σ_{t∈window_i} (1/c_t)` — sanity test: `ū_i = 1` when
   all `c_t = 1`; note `|window_i|` is the bar count, **not** a concurrency value.
@@ -196,7 +196,7 @@ first line of the decision body, not in the status field.
 
 ## D-006 — Barrier-touch resolution source
 
-- **Date:** 2026-05-22 — **Phase:** B — **Status:** Accepted
+- **Phase:** B — **Status:** Accepted
 - **Decision.** Resolve TP-vs-SL first-touch on the **1m** series (honest arm).
   Keep v1's **15m-optimistic** resolution as the comparison arm. Report (a) the
   same-bar ambiguity rate and (b) the edge delta between the two arms.
@@ -210,7 +210,7 @@ first line of the decision body, not in the status field.
   interesting honest findings.
 - **Recorded alternative.** 15m-optimistic resolution (v1) — kept as the
   comparison arm, reported, not trusted.
-- **Added detail (2026-05-25).** 1m resolution **reduces but does not eliminate**
+- **Added detail.** 1m resolution **reduces but does not eliminate**
   same-bar ambiguity: the identical tie-break problem recurs inside any single
   1m bar that straddles both barriers. The residual is ~an order of magnitude
   rarer than at 15m, so the residual bias is small — but log the **1m** same-bar
@@ -221,14 +221,14 @@ first line of the decision body, not in the status field.
 
 ## D-007 — Breakeven reference (38.5%, not 50%)
 
-- **Date:** 2026-05-22 — **Phase:** B — **Status:** Accepted
+- **Phase:** B — **Status:** Accepted
 - **Decision.** Record the pre-cost breakeven hit rate
   `2.5 / (4 + 2.5) = 38.5%` as the reference against which every precision-at-
   threshold is judged. Drop implicit use of 50%.
 - **v1 behavior.** Multipliers `m_of_target = 4`, `m_of_stop = 2.5` were used,
   but the implied 38.5% breakeven was never written down; 50% was the implicit
   yardstick.
-- **Note (2026-06-09) — keep the `4 / 2.5` multipliers (resolved).** While
+- **Note — keep the `4 / 2.5` multipliers (resolved).** While
   reading `latest_code_and_results` I noticed its `TargetExtractor3` ran
   `m_pt=1+√5≈3.236, m_ps=2` (long) and `m_nt=950, m_ns=2` (short), which differs
   from the `4 / 2.5` of the original `TargetExtractor` (`E*_*.ipynb:164`). The
@@ -242,7 +242,7 @@ first line of the decision body, not in the status field.
   precision is already an edge here. Stating the true bar prevents misreading
   results.
 - **Recorded alternative.** Implicit 50% (v1) — incorrect; superseded.
-- **Added detail (2026-05-25).** The 38.5% bar is the general payoff identity
+- **Added detail.** The 38.5% bar is the general payoff identity
   `breakeven = ℓ / (u + ℓ)` and is **pre-cost**. Net of fees + slippage the
   *effective* breakeven rises **above** 38.5%, because each trade must also pay
   its costs. The honest comparison is therefore net-precision against the
@@ -250,7 +250,7 @@ first line of the decision body, not in the status field.
   cost-adjusted breakeven once the [D-011](#d-011--cost-model) cost model is fixed and record it
   alongside the pre-cost reference; the success threshold ([D-008](#d-008--success-threshold-pre-registration)) judges against
   the cost-adjusted number.
-- **Added detail (2026-05-27) — theoretical basis.** The formula
+- **Added detail — theoretical basis.** The formula
   `ℓ / (u + ℓ)` is the **expected-value breakeven** from basic probability:
   if `p` is the hit rate and `(1−p)` the stop rate, expected P&L per unit =
   `p·u − (1−p)·ℓ = 0` solves to `p = ℓ/(u+ℓ)`. This is also the
@@ -263,7 +263,7 @@ first line of the decision body, not in the status field.
 
 ## D-008 — Success-threshold pre-registration
 
-- **Date:** 2026-05-22 — **Phase:** B — **Status:** Accepted
+- **Phase:** B — **Status:** Accepted
 - **Decision.** Before any model is trained, commit a falsifiable success
   condition to this log: net-of-cost out-of-sample precision above 38.5% with an
   `N_eff`-based CI excluding 38.5%, on at least K of N walk-forward test folds,
@@ -275,7 +275,7 @@ first line of the decision body, not in the status field.
 - **Rationale.** Pre-registration is the operational form of "honesty over
   results"; it removes the Phase-E temptation to retrofit the bar.
 - **Recorded alternative.** Post-hoc judgement (v1) — rejected.
-- **Added detail (2026-05-25) — correction to the Sharpe clause.**
+- **Added detail — correction to the Sharpe clause.**
   "**Deflated Sharpe > 0**" is **not a meaningful bar**: the DSR is a
   *probability* in `[0, 1]` and is almost always > 0. Replace with
   **DSR > 0.95** (or the chosen confidence). The DSR formula additionally
@@ -288,7 +288,7 @@ first line of the decision body, not in the status field.
   the **cost-adjusted** value ([D-007](#d-007--breakeven-reference-385-not-50) added detail), not the bare 38.5%. Finalize
   K, N, the DSR confidence, the PBO ceiling (consider adding a `PBO < 0.2`
   clause), and the `V` source before Phase E begins.
-- **Added detail (2026-05-27) — pinned values.** The pre-registered condition
+- **Added detail — pinned values.** The pre-registered condition
   is committed at the close of Phase B with:
   - **N = 8** (walk-forward fold count, [D-010](#d-010--walk-forward-geometry) added detail).
   - **K = 5** (60% pass rate). Stricter than majority (4) but tolerates one or
@@ -306,7 +306,7 @@ first line of the decision body, not in the status field.
 
 ## D-009 — Loss function
 
-- **Date:** 2026-05-22 — **Phase:** E (decided in B) — **Status:** Accepted
+- **Phase:** E (decided in B) — **Status:** Accepted
 - **Decision.** Two arms. v1-faithful: combined `0.7·MSE + 0.3·MAE` on a scalar
   output with post-hoc threshold search. Honest: a class-weighted **BCE / focal**
   classifier producing calibrated probabilities; weights = class × uniqueness
@@ -321,7 +321,7 @@ first line of the decision body, not in the status field.
 
 ## D-010 — Walk-forward geometry
 
-- **Date:** 2026-05-22 — **Phase:** B — **Status:** Accepted
+- **Phase:** B — **Status:** Accepted
 - **Decision.** Multi-fold walk-forward (expanding, anchored; fold count set so
   each test fold spans months and regimes are represented) is **primary**.
   Reproduce v1's single 75/15/10 chronological split as a one-off comparison
@@ -337,7 +337,7 @@ first line of the decision body, not in the status field.
   arm therefore wins outright; v1's split survives only as a reported number.
 - **Recorded alternative.** v1 single 75/15/10 split — comparison point, not a
   default.
-- **Added detail (2026-05-27) — concrete sizing.** The honest-arm geometry is
+- **Added detail — concrete sizing.** The honest-arm geometry is
   pinned with the following defaults in `make_walkforward_folds`:
 
   | parameter             | value                            |
@@ -357,7 +357,7 @@ first line of the decision body, not in the status field.
 
 ## D-011 — Cost model
 
-- **Date:** 2026-05-22 — **Phase:** C — **Status:** Accepted
+- **Phase:** C — **Status:** Accepted
 - **Decision.** Add a cost model: taker fee + slippage cushion sized to sub-1m
   touch ambiguity. Report **gross** P&L (lines up with v1) **and** net P&L (the
   honest number). Fills at the barrier price on 1m touch (consistent with [D-006](#d-006--barrier-touch-resolution-source)).
@@ -372,36 +372,51 @@ first line of the decision body, not in the status field.
 
 ## D-012 — pATR definition lock
 
-- **Date:** 2026-05-22 — **Phase:** B — **Status:** Accepted
+- **Phase:** B — **Status:** Accepted
 - **Decision.**
   Adopt v1's **percent ATR** (pATR) formula exactly — Wilder smoothing with
   window 10, directional true range via the `up_first` flag derived from 1m
   sub-candles. Lock the formula (Wilder/`pTR`/`up_first`); no changes.
   Definition, `pTR` formula, Wilder recurrence, and `up_first` mechanics live in [`GLOSSARY.md`](GLOSSARY.md).
-- **Higher-tf join lag (resolves Q4).**
-  Before higher-timeframe pATR is joined onto the 15m decision clock it is
-  lagged by **1 bar of the higher timeframe** — the join uses the most recent
-  *fully-closed* higher-tf bar at each 15m timestamp (`shift_higher_tf_bars = 1`,
-  applied in the higher tf). This is the **minimal leakage-safe lag**: the only
-  hazard is joining a pATR whose 1m sub-candles extend past `t`, and the last
-  bar that closed at or before `t` removes it completely (the bar is fully
-  formed; nothing in it postdates `t`). The lag unit is higher-tf bars, **not**
-  the 15m clock — a 15m-clock lag under-covers the longer frames (3 × 15m =
-  45m < 60m would leave `patr_60`/`patr_240` partially-formed and leaky).
-  The honest arm uses 1. v1's `shift(3)` is leakage-safe but over-conservative
-  (lagging 3 discards 2 extra closed bars, e.g. 8h stale on `patr_240`, for no
-  leakage benefit); it is **retained as the v1-faithful arm** —
-  `shift_higher_tf_bars = 3`, runnable through the same harness per
-  [D-001](#d-001--dual-arm-methodology-governing-rule). The gap between the two
-  lags is a finding.
-- **v1 behavior.** Formula identical (this is v1's design); v1's higher-tf lag
-  was `shift(3)` — kept as the v1-faithful arm.
-- **Verdict.** Adopt the formula unchanged; honest arm sets the join lag to the
-  minimal leakage-safe value (1), v1-faithful arm keeps v1's 3.
-- **Recorded alternative.** (a) A standard (non-directional) ATR — would break
-  comparability and discard a sound design; not used. (b) A 15m-clock lag —
-  rejected outright as leaky for `patr_60`/`patr_240`.
-- **Estimator-faithfulness note (2026-05-25).** López de Prado's reference
+- **Higher-tf join lag (resolves Q4; corrected against the v1 call-site).**
+  Higher-timeframe pATR is joined onto the 15m decision clock with a lag so a
+  15m row never sees a higher-tf bar that is not yet fully closed. The lag is
+  cleanest stated as **one fully-closed higher-tf bar**; on the 15m grid that is
+  **k 15m steps**, where `k = tf // 15` (1h → 4, 4h → 16). At that lag the
+  higher-tf value first appears exactly at the bar's *close* — causal, minimal.
+  This is the **honest arm** (`higher_tf_lag="causal"`).
+  - **What v1 actually does** (`btc_feature_engineering_utils.py:812-816`):
+    `patr_60 = df_60.shift(3)`, `patr_240 = df_240.shift(15)`, on the *15m-indexed*
+    series, then `ffill`+`bfill`. The shifts are **k − 1** (3, 15), not k.
+  - **Why k − 1 leaks 15 minutes.** v1 labels every candle by its **open** time
+    (`exo_feature_engineering_utils.py` `_create_the_h4_candle` /
+    `_get_the_1h_candle` store the bar covering `[t, t+tf)` at index `t`; verified
+    identical in `offlinepredictor/`). With open-labeling a bar does not *close*
+    until `t + k` steps, so `shift(k−1)` makes its pATR visible at `t + (k−1)` —
+    **one 15m bar before it finishes forming**. That one step is a genuine
+    look-ahead leak.
+  - **Arms.** Honest = `shift(k)` (value released at close) + forward-fill carry,
+    leading rows left null. **v1-faithful** (`higher_tf_lag="v1_faithful"`) =
+    reproduce v1 exactly: `shift(k−1)` + ffill + bfill, carrying the 15-min leak.
+    Both runnable through `attach_patr` per
+    [D-001](#d-001--dual-arm-methodology-governing-rule). **The gap is exactly
+    that one 15m step — the finding.**
+- **v1 behavior.** Formula identical (this is v1's design). Higher-tf lag =
+  per-timeframe `shift(k−1)` on the 15m clock (`patr_60`→3, `patr_240`→15) +
+  ffill/bfill, open-labeled — a 15-minute look-ahead. Reproduced in the
+  v1-faithful arm.
+- **Verdict.** Adopt the formula unchanged; honest arm lags by one fully-closed
+  higher-tf bar (`shift k`, causal); v1-faithful arm reproduces v1's `shift(k−1)`
+  + ffill/bfill leak.
+- **Recorded alternative.** A standard (non-directional) ATR — would break
+  comparability and discard a sound design; not used.
+- **Correction note.** An earlier version of this entry described the lag as
+  "3 higher-tf bars" in higher-tf units and rejected a "15m-clock lag" as leaky.
+  Both were wrong: pinning the v1 call-site showed the lag *is* on the 15m clock,
+  is per-timeframe (k − 1), and — because v1 is open-labeled — is itself the
+  source of a 15-min leak. The honest fix is `shift k`, not a different unit.
+  The leak is documented as [L-018](LEARNINGS.md#l-018--v1s-higher-tf-patr-join-is-a-15-minute-look-ahead-leak-open-labeled-shiftk1).
+- **Estimator-faithfulness note.** López de Prado's reference
   sets the volatility target `trgt` to an **EWMA standard deviation of
   close-to-close returns**, not to ATR.
   ATR is a different (though closely related) estimator.
@@ -418,7 +433,7 @@ first line of the decision body, not in the status field.
 
 ## D-013 — Feature-selection scope
 
-- **Date:** 2026-05-22 — **Phase:** D — **Status:** Accepted
+- **Phase:** D — **Status:** Accepted
 - **Decision.** Keep v1's *method* (Pearson filter at 0.95 + mutual-information
   ranking) but change the *scope*: rerun **per fold on training rows only**
   (honest arm). Run v1's single global selection (90% of data) once as a
@@ -435,7 +450,7 @@ first line of the decision body, not in the status field.
 
 ## D-014 — Meta-labeling (side / size decomposition)
 
-- **Date:** 2026-05-25 — **Phase:** E (decided in B) — **Status:** Proposed
+- **Phase:** E (decided in B) — **Status:** Proposed
 - **Open question to resolve before Phase E begins:** ratify whether
   meta-labeling stays in this iteration or moves to a follow-on iteration.
   If deferred, fall back to [D-009](#d-009--loss-function)'s single-stage arms.
@@ -463,8 +478,8 @@ first line of the decision body, not in the status field.
 - **Recorded alternative.** Single-stage three-class / scalar head (v1, D-009) —
   kept as comparison arm. If meta-labeling is deferred to a follow-on iteration, fall back to
   the directional collapse with `0` folded into "no-trade," and revisit.
-- **⚠️ Correction (2026-06-09) — the "v1 already did this" claim is retracted.**
-  The 2026-05-27 detail below argued v1 implicitly implemented meta-labeling via
+- **⚠️ Correction — the "v1 already did this" claim is retracted.**
+  The "v1 already implemented this" detail below argued v1 implicitly implemented meta-labeling via
   `target2=True` and that the v1-faithful arm must reproduce both `rt3` and
   `target3`. A friend who worked on v1 reports `target2`/`stop2_slack` are
   **"left from a failed experiment"**, and the code agrees: although the labeler
@@ -476,7 +491,7 @@ first line of the decision body, not in the status field.
   `target2`/`stop2_slack`** and produces the plain three-class side label only;
   `stop2_level` is removed from `LabelResult`. See [L-006](LEARNINGS.md#l-006--v1s-target2true-is-embedded-meta-labeling--but-it-was-a-failed-experiment) (corrected), [L-017](LEARNINGS.md#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs), and
   PHASE_B B.1. The text below is kept for the record but is no longer load-bearing.
-- **Added detail (2026-05-27) — v1 already implemented this implicitly
+- **Added detail — v1 already implemented this implicitly
   [RETRACTED — see correction above].**
   Analysis of v1's `TargetExtractor` family reveals that `target2=True` is an
   **embedded, rule-based meta-labeling** step baked into the labeler itself:
@@ -493,12 +508,12 @@ first line of the decision body, not in the status field.
   label pair that the v2 two-stage model consumes. The v1 labeler hard-coded
   the meta-label rule; v2 (D-014) learns it from data. ~~The v1-faithful arm
   in Phase B must reproduce both outputs, not just `target3`.~~
-  **[Superseded by the 2026-06-09 correction: `target3` is not reproduced; the
+  **[Superseded by the correction above: `target3` is not reproduced; the
   v1-faithful arm produces the side label only.]**
 
 ## D-015 — Labeling event filter (sampling cadence)
 
-- **Date:** 2026-05-25 — **Phase:** B — **Status:** Rejected
+- **Phase:** B — **Status:** Rejected
 - **Scope of rejection:** this iteration only; revisit in a follow-on iteration if the B.2
   diagnostics motivate it.
 - **Decision.** Honest arm samples decision points with a **symmetric CUSUM
@@ -519,7 +534,7 @@ first line of the decision body, not in the status field.
   volatility ([D-012](#d-012--patr-definition-lock) units). The filter uses past returns only — no look-ahead.
 - **Recorded alternative.** Fixed 15m-close cadence (v1, D-002) — the comparison
   arm and the default if CUSUM is descoped from this iteration.
-- **Added detail (2026-05-27) — descoped.** CUSUM event sampling is **out of
+- **Added detail — descoped.** CUSUM event sampling is **out of
   scope for this iteration**. Honest-arm cadence stays at every 15m close (D-002).
   Rationale: B.2 already produces the diagnostics (timeout fraction, average
   uniqueness / `N_eff`) that would motivate CUSUM; if those numbers reveal the
@@ -530,9 +545,9 @@ first line of the decision body, not in the status field.
 
 ## D-016 — Backtest geometry: walk-forward vs. CPCV
 
-- **Date:** 2026-05-25 — **Phase:** C (decided in B) — **Status:** Proposed
+- **Phase:** C (decided in B) — **Status:** Proposed
 - **Qualifier:** compute-gated. Scheme value reserved in Phase B; impl in
-  Phase C (see added detail 2026-05-27).
+  Phase C (see added detail below).
 - **Decision.** Primary backtester = single-path purged + embargoed
   **walk-forward** ([D-010](#d-010--walk-forward-geometry)). Run **Combinatorial Purged CV (CPCV)** in a *reduced*
   configuration — on the four baselines and a reduced-epoch model — to obtain the
@@ -552,16 +567,16 @@ first line of the decision body, not in the status field.
 - **Recorded alternative.** Walk-forward only, no CPCV — acceptable **iff** `V`
   is instead estimated from folds + the two dual arms + the four baselines treated
   as the trial set; record the chosen `V` source in D-008.
-- **Added detail (2026-05-27) — scheme value reserved in Phase B.** The
+- **Added detail — scheme value reserved in Phase B.** The
   `scheme="cpcv"` value is **reserved in `make_walkforward_folds`** at Phase B
   to keep the API stable; the implementation lands in Phase C and is
-  compute-gated. D-008's pinned values (added detail 2026-05-27) take
+  compute-gated. D-008's pinned values (see its added detail) take
   trial-set estimation as the **primary** `V` source; reduced CPCV is the
   **secondary** option, run only if the trial-set estimator is too narrow.
 
 ## D-017 — Time-decay on sample weights
 
-- **Date:** 2026-05-25 — **Phase:** B — **Status:** Accepted
+- **Phase:** B — **Status:** Accepted
 - **Verdict in one line:** resolved to "off" — no time-decay layer in this iteration.
 - **Decision.** **No time decay** in this iteration. Final weight = `class × uniqueness`
   ([D-005](#d-005--sample-uniqueness-weighting)) with de Prado's piecewise-linear decay on cumulative uniqueness disabled
@@ -581,7 +596,7 @@ first line of the decision body, not in the status field.
 
 ## D-018 — Grid containment check: modulo arithmetic over presence-based anti-join
 
-- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Phase:** A — **Status:** Accepted
 - **Decision.** `check_cross_timeframe_alignment` determines whether a
   coarser-tf `open_time` is "on the 1m grid" via a **modulo check**:
   `open_time_us % 60_000_000 == 0` (i.e., the timestamp is an exact
@@ -602,7 +617,7 @@ first line of the decision body, not in the status field.
 
 ## D-019 — CHECKSUM verification: soft on missing files
 
-- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Phase:** A — **Status:** Accepted
 - **Decision.** When fetching a Binance Vision ZIP, attempt to retrieve the
   co-located `.CHECKSUM` file. If the file is **absent** (HTTP 404 or any
   fetch error), log a warning and proceed. If the file **is present**, verify
@@ -618,14 +633,14 @@ first line of the decision body, not in the status field.
   checksum was actually verified, so it never overstates coverage.
 - **Recorded alternative.** Always require a checksum — blocks historical
   downloads for the majority of the dataset; rejected.
-- **Added detail (2026-06-05) — v1 has none of this discipline** (A.5,
+- **Added detail — v1 has none of this discipline** (A.5,
   [L-015](LEARNINGS.md#l-015--minor-v1-fill-and-convention-behaviors-catch-all)). The v1 audit confirms v1 performs no archive integrity
   verification of any kind. D-019 is a v2-only discipline; no dual-arm
   probe is needed.
 
 ## D-020 — ccxt tail bars: zero-fill missing ancillary columns
 
-- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Phase:** A — **Status:** Accepted
 - **Decision.** When the tail is filled via ccxt (`_fetch_ccxt_ohlcv`), set
   `number_of_trades`, `taker_buy_base_volume`, and `taker_buy_quote_volume`
   to **`0`** (integer / float zero) rather than `NaN` / `null`.
@@ -645,7 +660,7 @@ first line of the decision body, not in the status field.
 - **Recorded alternative.** NaN / null fill — propagates unpredictably
   through floating-point indicator math; rejected in favour of an explicit
   zero that can be detected and filtered deterministically.
-- **Added detail (2026-06-05) — v1 has no ccxt path** (A.5). The v1
+- **Added detail — v1 has no ccxt path** (A.5). The v1
   audit confirms v1 fetches from a single source (Binance directly) with
   no cross-source verification, and never reads the three ancillary
   columns this decision governs. D-020 is a v2-only discipline; no
@@ -653,7 +668,7 @@ first line of the decision body, not in the status field.
 
 ## D-021 — OHLCV schema: 9 columns
 
-- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Phase:** A — **Status:** Accepted
 - **Decision.** The canonical `OHLCV_SCHEMA` keeps **9 of the 12 columns**
   from a Binance Vision klines CSV:
   `open_time, open, high, low, close, volume, close_time, number_of_trades,
@@ -675,7 +690,7 @@ first line of the decision body, not in the status field.
 
 ## D-022 — Integrity check severity taxonomy: physically-impossible = hard, market-real = soft
 
-- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Phase:** A — **Status:** Accepted
 - **Decision.** The governing rule for `check_integrity` severity
   classification:
   - **Hard failure** — condition is *physically impossible* or indicates
@@ -700,7 +715,7 @@ first line of the decision body, not in the status field.
 - **Recorded alternative.** Treat every anomaly as a hard failure — would
   reject real-but-anomalous data (e.g., a single maintenance gap) and make
   the dataset effectively unusable; rejected.
-- **Added detail (2026-06-05) — v1 has none of this taxonomy**
+- **Added detail — v1 has none of this taxonomy**
   ([L-013](LEARNINGS.md#l-013--v1-has-no-ohlc-arithmetic-check-at-any-stage), [L-014](LEARNINGS.md#l-014--v1-silently-clamps-volume--1-to-1), [L-015](LEARNINGS.md#l-015--minor-v1-fill-and-convention-behaviors-catch-all)). The v1 audit confirms v1 enforces no OHLC
   arithmetic check, no NaN OHLC check, no price-bound check, and
   silently clamps `volume < 1 → 1` rather than classifying zero-volume
@@ -710,7 +725,7 @@ first line of the decision body, not in the status field.
 
 ## D-023 — Price sanity bounds: close ∈ [100, 1 000 000] for BTC/USDT
 
-- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Phase:** A — **Status:** Accepted
 - **Decision.** Flag `close < 100` or `close > 1_000_000` as a **hard
   integrity failure**.
 - **v1 behavior.** No price-range check.
@@ -731,7 +746,7 @@ first line of the decision body, not in the status field.
 
 ## D-024 — Gap handling: soft observation, never forward-fill
 
-- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Phase:** A — **Status:** Accepted
 - **Decision.** Gaps (missing bars where the expected bar is absent) are
   recorded in `IntegrityReport.gaps` as soft observations and the DataFrame
   is returned unmodified. Forward-filling, interpolation, or any other
@@ -750,7 +765,7 @@ first line of the decision body, not in the status field.
 - **Recorded alternative.** Forward-fill with previous bar's close — creates
   fictitious bars that distort volume-based features, OHLC arithmetic, and
   any volatility estimator; rejected.
-- **Added detail (2026-06-05) — operationalized as [D-036](#d-036--gap-fill-discipline-leakage-probe)**
+- **Added detail — operationalized as [D-036](#d-036--gap-fill-discipline-leakage-probe)**
   ([L-008](LEARNINGS.md#l-008--v1s-default-gap-interpolation-is-non-causal-and-contaminates-labels)). The v1 audit confirms v1's default
   `LinearInterpolator._estimate_ohlcv_and_insert_the_candles` synthesizes
   missing OHLCV by *non-causal* weighted average of the previous and
@@ -762,7 +777,7 @@ first line of the decision body, not in the status field.
 
 ## D-025 — Cross-timeframe alignment check severity: grid containment HARD, spacing and coverage SOFT
 
-- **Date:** 2026-05-26 — **Phase:** A — **Status:** Accepted
+- **Phase:** A — **Status:** Accepted
 - **Decision.** The three sub-checks inside `check_cross_timeframe_alignment`
   have different severity:
   - **Grid containment** (coarser-tf `open_time` not at a whole-minute
@@ -786,7 +801,7 @@ first line of the decision body, not in the status field.
   hard-fail on the known Binance early-data timestamp anomaly ([L-001](LEARNINGS.md#l-001--early-binance-1m-data-has-sub-minute-timestamp-offsets))
   without delivering additional protection, since the anomaly is fully
   characterised and its downstream impact is bounded; rejected.
-- **Added detail (2026-06-05) — reinforced by [D-039](#d-039--cross-timeframe-alignment-method-leakage-probe)**
+- **Added detail — reinforced by [D-039](#d-039--cross-timeframe-alignment-method-leakage-probe)**
   ([L-011](LEARNINGS.md#l-011--v1-mixes-multi-tf-samples-by-counter-walking-not-by-timestamp-join), [L-012](LEARNINGS.md#l-012--v1-silently-floor-snaps-off-grid-bars-per-timeframe-including-the-binance-quirk-window)). The v1 audit confirms v1 has no cross-timeframe
   alignment check at all and assembles multi-TF features via
   `DataMixer3._mix_train` counter-walking rather than timestamp join.
@@ -798,43 +813,27 @@ first line of the decision body, not in the status field.
 
 ## D-026 — pATR for barriers: 15m for both target and stop (MTF kept available)
 
-- **Date:** 2026-05-27; **revised 2026-06-09** — **Phase:** B — **Status:**
+- **Phase:** B — **Status:**
   Revised (default changed to 15/15; MTF retained as an available arm)
-- **Verdict in one line:** default to **15m pATR for both** target and stop, per
-  the friend's explicit v2 recommendation; keep MTF asymmetry as an available,
-  off-by-default experimental arm — **not** discarded.
-- **Decision.** The profit target and the stop are both anchored on the **15m
-  pATR** (`patr_15`) by default. `make_labels` still accepts `target_patr_col`
-  and `stop_patr_col` separately so the asymmetric multi-timeframe configuration
-  (e.g. `patr_240` target / `patr_60` stop) can be run as an **optional
-  experiment**; it is just not the default for this iteration.
-- **Why the default changed (2026-06-09).** A friend who worked on v1 advised
-  directly: *"Use 15m pATR for both target and stop. Do not use 1h or 4h pATR for
-  now."* Consistent with this, the `TargetExtractor3` constructor default is
-  `target_patr=15, stop_patr=15` (`btc_feature_engineering_utils.py:968`,
-  `:972-974`) and the notebooks in `latest_code_and_results`
-  (`0_Preprocessing.ipynb`, `E1/E2/E4/E6_*.ipynb`) instantiate it as 15/15.
-  **Important caveat:** `latest_code_and_results` is **not** all of v1 — the
-  broader `Assareh/` tree holds older experiments/decisions, and MTF (240/60) is
-  a real, supported code path that may have been used in v1 work we haven't
-  inventoried. So this is a *default change for v2*, **not** a finding that the
-  earlier D-026 was wrong or that MTF was never used in v1. The MTF-asymmetry
-  reasoning in [L-007](LEARNINGS.md#l-007--multi-timeframe-atr-term-structure-why-longer-vol-for-target-shorter-vol-for-stop) stands on its own; whether any reported v1 number used MTF
-  is **open pending the friend's confirmation** (see [L-017](LEARNINGS.md#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs)).
-- **v1 behavior.** Both barriers anchored on `patr_15` in the
-  `latest_code_and_results` config. The 240/60 split is a supported path; its use
-  elsewhere in v1 is unconfirmed.
-- **Verdict.** Default 15/15 for v2 (friend's recommendation). MTF asymmetry
-  retained as an available, separately reported experiment.
-- **Rationale.** The friend explicitly recommends 15/15 for now, and it matches
-  the config we can see. Defaulting to 15/15 keeps the v1-faithful arm aligned
-  with the inspected config and avoids silently adopting a barrier-scaling choice
-  whose v1 provenance we haven't pinned down. MTF stays one flag away if B.2
-  diagnostics (timeout-class fraction, precision) motivate testing it.
-- **Recorded alternative.** MTF asymmetry (`patr_240` target / `patr_60` stop)
-  — kept as an **available experimental arm**, off by default; the
-  term-structure rationale (L-007) remains valid. Single-timeframe on a
-  *non-15m* native pATR is not pursued.
+- **Verdict in one line:**
+  default to **15m pATR for both** target and stop.
+  Keep MTF asymmetry as an available, off-by-default experimental arm — **not** discarded.
+- **Decision.**
+  The profit target and the stop are both anchored on the **15m pATR** (`patr_15`) by default.
+  `make_labels` still accepts `target_patr_col` and `stop_patr_col` separately so the asymmetric multi-timeframe configuration (e.g. `patr_240` target / `patr_60` stop) can be run as an **optional experiment**;
+  it is just not the default for this iteration.
+- **Why the default changed.** A friend who worked on v1 advised
+  directly: *"Use 15m pATR for both target and stop. Do not use 1h or 4h pATR for now."*
+  Consistent with this, the `TargetExtractor3` constructor default is `target_patr=15, stop_patr=15` (`btc_feature_engineering_utils.py:968`, `:972-974`) and the notebooks in `latest_code_and_results` (`0_Preprocessing.ipynb`, `E1/E2/E4/E6_*.ipynb`) instantiate it as 15/15.
+- **v1 behavior.**
+  Both barriers anchored on `patr_15` in the `latest_code_and_results` config.
+  The 240/60 split is a supported path; its use elsewhere in v1 is unconfirmed.
+- **Verdict.** Default 15/15 for v2 (friend's recommendation).
+  MTF asymmetry retained as an available, separately reported experiment.
+- **Recorded alternative.**
+  MTF asymmetry (`patr_240` target / `patr_60` stop) — kept as an **available experimental arm**, off by default;
+  the term-structure rationale (L-007) remains valid.
+  Single-timeframe on a *non-15m* native pATR is not pursued.
 - **See also.** [`GLOSSARY.md`](GLOSSARY.md) →
   [MTF pATR](GLOSSARY.md#mtf-patr-multi-timeframe-asymmetry) ·
   [pATR](GLOSSARY.md#patr-percent-atr) ·
@@ -843,7 +842,7 @@ first line of the decision body, not in the status field.
 
 ## D-027 — Entry-price convention: close of the 15m bar at `t`
 
-- **Date:** 2026-05-27 — **Phase:** B — **Status:** Accepted
+- **Phase:** B — **Status:** Accepted
 - **Decision.** The barriers at decision time `t` are anchored on
   `entry_price = df15["close"][t]`. The 1m forward walk scans strictly
   **after** `df15["close_time"][t]`, so no 1m bar that falls inside the entry
@@ -865,7 +864,7 @@ first line of the decision body, not in the status field.
 
 ## D-028 — 1m intra-bar tie-break (honest arm)
 
-- **Date:** 2026-05-27 — **Phase:** B — **Status:** Accepted
+- **Phase:** B — **Status:** Accepted
 - **Decision.** When a single 1m bar's high–low range contains *both*
   barriers, the honest arm resolves the order of first touch deterministically
   using the bar's net direction:
@@ -894,7 +893,7 @@ first line of the decision body, not in the status field.
 
 ## D-029 — `LabelResult` schema and tail-sentinel dtype
 
-- **Date:** 2026-05-27 — **Phase:** B — **Status:** Accepted
+- **Phase:** B — **Status:** Accepted
 - **Decision.** `make_labels` returns a single Polars `DataFrame` aligned to
   the 15m decision clock — one row per 15m bar in `df15`, never reindexed or
   filtered by the labeler. Columns (full list in PHASE_B.md B.1):
@@ -925,7 +924,7 @@ first line of the decision body, not in the status field.
     for unlabeled rows — rejected; `rt3.is_null()` already conveys
     unlabelability and a typed null is harder to misuse than a sentinel
     integer.
-- **Added detail (2026-06-05) — typed-null is the honest-arm signal
+- **Added detail — typed-null is the honest-arm signal
   for [D-036](#d-036--gap-fill-discipline-leakage-probe) and [D-038](#d-038--patr-fill-policy-in-label-construction-leakage-probe).** The new probes both depend on D-029's
   typed-null mechanism: when a label's resolution would require
   synthesized data (a gap crossed by the 1m barrier walk, D-036; or a
@@ -937,7 +936,7 @@ first line of the decision body, not in the status field.
 
 ## D-036 — Gap-fill discipline (leakage probe)
 
-- **Date:** 2026-06-05 — **Phase:** B (primary; downstream in D) — **Status:** Accepted
+- **Phase:** B (primary; downstream in D) — **Status:** Accepted
 - **Decision.** Leakage-probe flavor per [D-001](#d-001--dual-arm-methodology-governing-rule), now **three arms** on the
   `gap_fill` axis. *Honest arm primary*: gaps in raw OHLCV are left as
   observed ([D-024](#d-024--gap-handling-soft-observation-never-forward-fill)); barrier walks in `make_labels` that would cross an
@@ -945,7 +944,7 @@ first line of the decision body, not in the status field.
   Phase D that would cross a gap return masked cells, dropped by the batch
   sampler. *v1-faithful arm* (run once, then retired): reproduce v1's
   `LinearInterpolator` non-causal weighted-average fill before labeling and
-  feature compute. *Causal-ZOH comparison arm (added 2026-06-09)*: forward-fill
+  feature compute. *Causal-ZOH comparison arm*: forward-fill
   each gap by repeating the last observed bar (zero-order hold) — **causal**, so
   no look-ahead, but still fabricates bars. It isolates how much of the
   honest-vs-v1 gap is due to *non-causality* (the weighted average reaching into
@@ -979,7 +978,7 @@ first line of the decision body, not in the status field.
 
 ## D-037 — Feature-frame NaN policy (leakage probe)
 
-- **Date:** 2026-06-05 — **Phase:** D — **Status:** Accepted
+- **Phase:** D — **Status:** Accepted
 - **Decision.** Leakage-probe flavor per [D-001](#d-001--dual-arm-methodology-governing-rule). *Honest arm primary*: NaN
   cells in any feature column are left untouched; the model's batch
   sampler masks rows whose sample window contains NaN in any consumed
@@ -1005,7 +1004,7 @@ first line of the decision body, not in the status field.
 
 ## D-038 — pATR fill policy in label construction (leakage probe)
 
-- **Date:** 2026-06-05 — **Phase:** B — **Status:** Accepted
+- **Phase:** B — **Status:** Accepted
 - **Decision.** Leakage-probe flavor per [D-001](#d-001--dual-arm-methodology-governing-rule). *Honest arm primary*:
   barrier widths at bar `t` use only pATR realised at or before `t`. Bars
   whose pATR is NaN at `t` (series start, gap-adjacent) emit a typed-null
@@ -1031,7 +1030,7 @@ first line of the decision body, not in the status field.
 
 ## D-039 — Cross-timeframe alignment method (leakage probe)
 
-- **Date:** 2026-06-05 — **Phase:** D — **Status:** Accepted
+- **Phase:** D — **Status:** Accepted
 - **Decision.** Leakage-probe flavor per [D-001](#d-001--dual-arm-methodology-governing-rule). *Honest arm primary*:
   multi-TF features assembled via `merge_asof` (backward direction,
   strict) on the 15m decision clock — a higher-timeframe bar is visible
@@ -1059,7 +1058,7 @@ first line of the decision body, not in the status field.
 
 ## D-040 — v1's qualified-event filter (`consider_res`)
 
-- **Date:** 2026-06-09 — **Phase:** B — **Status:** Open (to decide; recorded so
+- **Phase:** B — **Status:** Open (to decide; recorded so
   it isn't lost — per user instruction to represent it in the plan)
 - **Context.** v1's `TargetExtractor3` was run with `consider_res=True` in
   `latest_code_and_results`. This sets a per-bar `qualified` flag derived from

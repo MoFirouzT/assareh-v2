@@ -201,16 +201,20 @@ separately reported experiment if B.2 diagnostics motivate it.
 
 ### Higher-tf pATR join lag
 
-Higher-timeframe pATR series are lagged in **bars of the higher timeframe**
-before being joined onto the 15m decision clock. The lag prevents current-bar
-bleed — the guarantee is that no row of the 15m frame sees a
-higher-timeframe pATR value that depends on data from after that row's
-timestamp. The honest arm uses a lag of **1 bar** (`shift_higher_tf_bars = 1`) —
-the last fully-closed higher-tf bar, the minimal leakage-safe lag. The
-v1-faithful arm keeps v1's **3** (`shift(3)`) — leakage-safe but
-over-conservative — runnable through the same parameter. Set and reasoned in
+Higher-timeframe pATR is joined onto the 15m decision clock with a lag so a 15m
+row never sees a higher-tf bar that has not fully closed. Stated cleanly the lag
+is **one fully-closed higher-tf bar**, which on the 15m grid is **k steps**
+(`k = tf // 15`; 1h → 4, 4h → 16) — the value first appears exactly at the bar's
+close. That is the **honest arm** (`higher_tf_lag="causal"`, `shift k` + ffill).
+
+v1 instead does `patr_60.shift(3)` / `patr_240.shift(15)` on the 15m-indexed
+series (+ ffill/bfill) — i.e. **k − 1**, one step short. Because v1 labels each
+candle by its **open** time, a bar does not close until `t + k`, so `shift(k−1)`
+releases its pATR **one 15m bar early** — a 15-minute look-ahead leak. The
+**v1-faithful arm** (`higher_tf_lag="v1_faithful"`) reproduces it exactly; the
+honest-vs-faithful gap is that single 15m step. Set and reasoned in
 **[D-012](DECISIONS.md#d-012--patr-definition-lock)** (which also resolves
-PHASE_B.B.0 Q4, "3 bars of which clock").
+PHASE_B.B.0 Q4).
 
 ---
 

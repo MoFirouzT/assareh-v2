@@ -59,50 +59,53 @@ def attach_patr(
     *,
     window: int = 10,
     timeframes_minutes: tuple[int, ...] = (15, 60, 240),
+    higher_tf_lag: Literal["causal", "v1_faithful"] = "causal",
 ) -> pl.DataFrame:
     """Return df15 with patr_<tf> columns attached, one per requested timeframe.
 
     For each timeframe `tf` in `timeframes_minutes`, computes percent ATR (pATR)
     via Wilder smoothing (window=10), directional true range via the `up_first`
-    flag derived from 1m sub-candles within each tf bar, then as-of joins onto
-    the 15m clock. Higher-timeframe pATR series are lagged by
-    `shift_higher_tf_bars` bars of the higher tf before the join (D-012:
-    1 = honest, last fully-closed higher-tf bar; 3 = v1-faithful arm).
+    flag derived from 1m sub-candles within each tf bar, then joins onto the 15m
+    clock. Higher timeframes (tf > 15) are lagged before the join (D-012):
+
+      - "causal" (honest, default): shift by k = tf // 15 fifteen-minute steps —
+        one fully-closed higher-tf bar; value released at the bar's close, then
+        forward-filled. Leading rows (before the first close) stay null.
+      - "v1_faithful": reproduce v1 exactly — shift by k - 1, then ffill + bfill.
+        Because v1 is open-labeled this releases the value one 15m bar early: a
+        15-minute look-ahead leak. The honest-vs-faithful gap is that one step.
     """
 ```
 
-Default output adds `patr_15`, `patr_60`, `patr_240` to `df15`. Phase D may
-extend `timeframes_minutes`; Phase B's labeler needs only **`patr_15`** (both
-barriers, per D-026 revised). `patr_60` / `patr_240` are still computed so the
-optional MTF-asymmetry experiment ([L-007](LEARNINGS.md#l-007--multi-timeframe-atr-term-structure-why-longer-vol-for-target-shorter-vol-for-stop)) can be run without recomputation, but
-they are not consumed by the default label path.
+Default output adds `patr_15`, `patr_60`, `patr_240` to `df15`.
+Phase D may extend `timeframes_minutes`;
+Phase B's labeler needs only **`patr_15`** (both barriers, per D-026 revised).
+`patr_60` / `patr_240` are still computed so the optional MTF-asymmetry experiment ([L-007](LEARNINGS.md#l-007--multi-timeframe-atr-term-structure-why-longer-vol-for-target-shorter-vol-for-stop)) can be run without recomputation, but they are not consumed by the default label path.
 
-> **Q4 (`shift(3)` mechanics) — RESOLVED in [D-012](DECISIONS.md#d-012--patr-definition-lock).**
-> The shift unit is **bars of the higher tf** (not the 15m clock), and the lag
-> is **1 bar** — the last fully-closed higher-tf bar, the minimal leakage-safe
-> lag. `attach_patr` takes `shift_higher_tf_bars: int = 1` (honest arm), applied
-> in the higher tf. v1's value **3** (`shift(3)`) is leakage-safe but
-> over-conservative; it is **retained as the v1-faithful arm** via the same
-> parameter. (A 15m-clock lag is rejected — 3 × 15m < 60m would leave
-> `patr_60`/`patr_240` partially-formed and leaky.)
+Q4 (`shift(3)` mechanics) is **resolved in [D-012](DECISIONS.md#d-012--patr-definition-lock)**:
+the lag is on the 15m clock, per-timeframe, and v1's `k − 1` shift is a 15-min
+look-ahead leak (v1 is open-labeled). Honest = `shift k`; v1-faithful reproduces
+`k − 1` + ffill/bfill.
 
 ### B.0 Tests
 
 - Wilder recurrence: `attach_patr` on a hand-built OHLCV series matches the
-  closed-form `pATR[i] = (pATR[i-1]·(n-1) + pTR[i]) / n` with `n=10` to within
-  float tolerance.
+  closed-form `pATR[i] = (pATR[i-1]·(n-1) + pTR[i]) / n` with `n=10`, seeded by
+  `pATR[n-1] = mean(pTR[0:n])` and NaN for rows `0..n-2`, to float tolerance.
 - Gap-term coverage: a synthetic series with a between-bar jump exercises the
   `|H − C_prev|` / `|L − C_prev|` terms of the true range.
-- `up_first` determinism: a 15m bar whose 1m sub-candles trend cleanly up has
-  `up_first = 1`; cleanly down has `up_first = 0`; mixed paths resolve by the
-  sign of the net move.
-- `shift_higher_tf_bars` invariance: with `shift_higher_tf_bars=0` and equal
-  timeframes, `patr_15 == patr_native_on_15m` (sanity).
+- `up_first` determinism: a higher-tf bar whose 1m sub-candles reach the high
+  before the low has `up_first = 1`; low-before-high has `up_first = 0`; a tie
+  (both extremes in the same 1m bar) resolves to `close ≤ open` (v1 rule).
+- Causal vs v1-faithful lag: for `patr_60`, the causal arm releases each 1h
+  pATR exactly at the bar's close (`shift k`, leading rows null), the v1-faithful
+  arm one 15m bar earlier (`shift k-1` + ffill/bfill); the two differ by exactly
+  one 15m step (the leak).
 
 ### B.0 Definition of done
 
 - `attach_patr` returns the canonical three pATR columns on the 15m frame
-- Tests pass; Q4 resolution folded into [D-012](DECISIONS.md#d-012--patr-definition-lock) (lag = 1 higher-tf bar)
+- Tests pass; Q4 resolution folded into [D-012](DECISIONS.md#d-012--patr-definition-lock) (honest `shift k`; v1-faithful `shift k-1` leak)
 - [D-012](DECISIONS.md#d-012--patr-definition-lock), [D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available) reflected; module path matches the layout above
 
 ---

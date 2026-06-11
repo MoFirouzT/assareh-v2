@@ -20,6 +20,50 @@ def _parse_interval(interval: str) -> timedelta:
 
 
 @pytest.fixture
+def make_ohlcv():
+    """Factory: build a schema-valid OHLCV frame from explicit OHLC arrays.
+
+    For numeric indicator tests (e.g. pATR) that need controlled intra-bar paths,
+    rather than the generic issue-injecting `synthetic_ohlcv` fixture. Times are
+    generated from `start` stepping `interval`; `volume` defaults to a constant.
+    """
+
+    def _factory(
+        opens: list[float],
+        highs: list[float],
+        lows: list[float],
+        closes: list[float],
+        *,
+        interval: str = "1m",
+        start: datetime = datetime(2022, 1, 1, tzinfo=timezone.utc),
+        volumes: list[float] | None = None,
+    ) -> pl.DataFrame:
+        n = len(opens)
+        if not (len(highs) == len(lows) == len(closes) == n):
+            raise ValueError("OHLC arrays must be the same length")
+        td = _parse_interval(interval)
+        times = [start + td * i for i in range(n)]
+        vols = volumes if volumes is not None else [100.0] * n
+        return pl.DataFrame(
+            {
+                "open_time": times,
+                "open": [float(x) for x in opens],
+                "high": [float(x) for x in highs],
+                "low": [float(x) for x in lows],
+                "close": [float(x) for x in closes],
+                "volume": [float(x) for x in vols],
+                "close_time": [t + td for t in times],
+                "number_of_trades": [500] * n,
+                "taker_buy_base_volume": [50.0] * n,
+                "taker_buy_quote_volume": [50.0 * 30_000.0] * n,
+            },
+            schema=OHLCV_SCHEMA,
+        )
+
+    return _factory
+
+
+@pytest.fixture
 def synthetic_ohlcv():
     """Fixture factory: call with (rows, interval, issues) to get a synthetic OHLCV DataFrame.
 

@@ -694,3 +694,36 @@ on the 15m clock (higher-TF bar visible at/after close, never the forming bar);
 recorded here so the alignment discipline is cross-checked against someone who
 built v1's alignment. **Open:** clarify the exact "5–8" sub-bar rule with the
 friend before encoding any offset beyond the close-visibility rule.
+
+## L-018 — v1's higher-tf pATR join is a 15-minute look-ahead leak (open-labeled `shift(k−1)`)
+
+**Discovered:** B.0 implementation, pinning the v1 call-site
+**Affected:** every 15m row's `patr_60` / `patr_240` — i.e. all barrier widths
+whenever the MTF arms are used
+
+v1 attaches higher-timeframe pATR to the 15m clock with
+`patr_60 = df_60.shift(3)` and `patr_240 = df_240.shift(15)` on the *15m-indexed*
+series (`btc_feature_engineering_utils.py:812-816`), then `ffill`+`bfill`. The
+shifts are **k − 1** (k = `tf // 15`: 4 and 16), i.e. one 15m step short of a
+full higher-tf bar.
+
+The leak follows from v1's **open-time labeling**: `_create_the_h4_candle` /
+`_get_the_1h_candle` (`exo_feature_engineering_utils.py`, identical in
+`offlinepredictor/`) store the bar covering `[t, t+tf)` at index `t`. So a bar
+does not *close* until `t + k` steps, yet `shift(k−1)` makes its pATR visible at
+`t + (k−1)` — **one 15m bar before it finishes forming**. Barrier widths at that
+row depend on a not-yet-closed higher-tf bar.
+
+This is distinct from [L-010](#l-010--v1s-patr-series-is-ffillbfilld-inside-targetextractor23)
+(that is the `ffill`+`bfill` *warm-up* fill on the pATR series; this is the
+*join lag* itself being one step early). The honest fix matches the
+close-visibility discipline in the L-011 addendum / D-039 (higher-tf bar visible
+only at/after its close).
+
+**Implication for v2 Phase B (B.0, dual-arm — [D-012](DECISIONS.md#d-012--patr-definition-lock)):**
+
+- *Honest arm* (`attach_patr(higher_tf_lag="causal")`) — `shift(k)` + ffill: the
+  higher-tf pATR first appears exactly at the bar's close; leading rows null.
+- *v1-faithful arm* (`higher_tf_lag="v1_faithful"`) — reproduce `shift(k−1)` +
+  ffill + bfill, carrying the 15-min leak.
+- **The gap is exactly one 15m step** — the cleanest leakage finding in B.0.
