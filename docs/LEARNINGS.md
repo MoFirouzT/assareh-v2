@@ -405,8 +405,7 @@ aligned**. The drift is silent and cumulative.
 
 - *v1-faithful arm* — reproduce the counter-walked mix.
 - *honest arm* — assemble multi-TF features via `merge_asof` on the 15m
-  decision clock (backward direction, strict; per [D-030](DECISIONS.md#d-030--phase-b-module-layout)'s existing
-  alignment rules). Any timeframe that doesn't have a bar at or before
+  decision clock (backward direction, strict). Any timeframe that doesn't have a bar at or before
   the decision bar emits a typed-null cell.
 
 Distinct from [L-008](#l-008--v1s-default-gap-interpolation-is-non-causal-and-contaminates-labels) and [L-009](#l-009--v1s-datamixerload_features-applies-blanket-bfill-to-every-feature-column): the gap-fill and `bfill` probes are about
@@ -616,8 +615,7 @@ documented as such (scripts/data_downloader.py:378).
 **Implication.** No silent corruption on historical back-fills regardless
 of which encoding Binance happened to publish for a given archive. The
 guard is local to Vision CSV parsing; no downstream code needs to be aware
-of it, because `OHLCV_SCHEMA` pins the final dtype at the loader boundary
-([D-034](DECISIONS.md#d-034--loader-casts-to-canonical-schema-rather-than-asserting-exact-match)).
+of it, because `OHLCV_SCHEMA` pins the final dtype at the loader boundary.
 
 ---
 

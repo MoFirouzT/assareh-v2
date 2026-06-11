@@ -92,7 +92,7 @@ evaluation-harness skeleton *before* writing any model.
 
 - **Multi-timeframe [pATR](GLOSSARY.md#patr-percent-atr) module** (`features/patr.py`) producing `patr_15`,
   `patr_60`, `patr_240` on the 15m clock — prerequisite for B.1
-  ([D-012](DECISIONS.md#d-012--patr-definition-lock), [D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available), [D-031](DECISIONS.md#d-031--patr-module-location))
+  ([D-012](DECISIONS.md#d-012--patr-definition-lock), [D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available))
 - Triple-barrier target function with tests — **1m-resolved barrier ordering
   primary** (honest arm), 15m-optimistic ordering retained as the v1-faithful
   comparison arm ([D-006](DECISIONS.md#d-006--barrier-touch-resolution-source)). Barriers anchored on the 15m close ([D-027](DECISIONS.md#d-027--entry-price-convention-close-of-the-15m-bar-at-t)); 1m
@@ -161,10 +161,8 @@ evaluation-harness skeleton *before* writing any model.
   and the `V` source per D-016 (reduced-config CPCV if implemented,
   trial-set estimator over `folds × dual arms × baselines` as the recorded
   fallback). Both stages appended to D-008
-- Decision-log entries D-027 … [D-033](DECISIONS.md#d-033--forward-walk-vectorization-strategy) reflecting the new B-phase choices
-  (entry-price convention, intra-bar tie-break, `LabelResult` schema, module
-  layout, pATR module location, `label_spans` representation, forward-walk
-  vectorization)
+- Decision-log entries D-027 … [D-029](DECISIONS.md#d-029--labelresult-schema-and-tail-sentinel-dtype) reflecting the new B-phase choices
+  (entry-price convention, intra-bar tie-break, `LabelResult` schema)
 - **CI scaffold** (VISION DoD #6 — CI green on every change). A minimal
   GitHub Actions workflow runs `uv sync`, `uv run ruff check .`,
   `uv run mypy src/`, and `uv run pytest` on every push and PR. Lands in

@@ -17,7 +17,7 @@ Everything here decides whether the eventual model's numbers will mean anything.
 
 ---
 
-## Module layout (D-030)
+## Module layout
 
 Phase B introduces the following modules.
 Pin these paths now so all of B.1–B.4 land in agreed locations; downstream phases import from them:
@@ -25,7 +25,7 @@ Pin these paths now so all of B.1–B.4 land in agreed locations; downstream pha
 ```text
 src/assareh/
   features/
-    patr.py            # B.0 — multi-timeframe pATR (D-012, D-026, D-031)
+    patr.py            # B.0 — multi-timeframe pATR (D-012, D-026)
   labels/
     targets.py         # B.1 — make_labels, LabelResult
     diagnostics.py     # B.2 — target_stats helper
@@ -47,8 +47,7 @@ tests/
 ## B.0 — Multi-timeframe pATR (prerequisite)
 
 `make_labels` requires the two pATR series attached to the 15m frame. The pATR
-formula is locked ([D-012](DECISIONS.md#d-012--patr-definition-lock)); the multi-timeframe split is locked ([D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available)); the
-module path is locked ([D-031](DECISIONS.md#d-031--patr-module-location)).
+formula is locked ([D-012](DECISIONS.md#d-012--patr-definition-lock)); the multi-timeframe split is locked ([D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available)).
 
 ```python
 # src/assareh/features/patr.py
@@ -102,7 +101,7 @@ they are not consumed by the default label path.
 
 - `attach_patr` returns the canonical three pATR columns on the 15m frame
 - Tests pass; Q4 resolution is committed to DECISIONS.md
-- [D-012](DECISIONS.md#d-012--patr-definition-lock), [D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available), [D-031](DECISIONS.md#d-031--patr-module-location) reflected; module path matches the layout above
+- [D-012](DECISIONS.md#d-012--patr-definition-lock), [D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available) reflected; module path matches the layout above
 
 ---
 
@@ -295,7 +294,7 @@ without re-using the `up_first` flag (which is computed from a *different*
 it should be independent of). Bars flagged `ambig_1m = True` are exactly the
 bars where this tie-break is invoked; the rate is logged in B.2.
 
-### Forward-walk vectorization (D-033)
+### Forward-walk vectorization
 
 Naive iteration is ~2.3B 1m lookups (306K decisions × ~7.7K bars each) and
 unacceptably slow. The honest-arm resolution is implemented in Polars without a
@@ -447,10 +446,9 @@ unchanged — barrier-path tests are a separate concern.
   the honest defaults (`"observed"`, `"realised_only"`); the v1-faithful
   values (`"v1_noncausal"`, `"v1_ffill_bfill"`) reproduce v1's [L-008](LEARNINGS.md#l-008--v1s-default-gap-interpolation-is-non-causal-and-contaminates-labels) and
   [L-010](LEARNINGS.md#l-010--v1s-patr-series-is-ffillbfilld-inside-targetextractor23) behaviors and pass the dedicated D-036 / [D-038](DECISIONS.md#d-038--patr-fill-policy-in-label-construction-leakage-probe) tests above
-- [D-002](DECISIONS.md#d-002--decision-cadence-15m-bar-close), D-003, [D-006](DECISIONS.md#d-006--barrier-touch-resolution-source), [D-012](DECISIONS.md#d-012--patr-definition-lock), D-014, D-026, D-027, D-028, D-029, [D-033](DECISIONS.md#d-033--forward-walk-vectorization-strategy),
-  D-036, D-038 entries reflected in DECISIONS.md (D-033 governs the
-  Polars forward-walk strategy; D-036 and D-038 are the data-handling
-  leakage probes from the v1 audit)
+- [D-002](DECISIONS.md#d-002--decision-cadence-15m-bar-close), D-003, [D-006](DECISIONS.md#d-006--barrier-touch-resolution-source), [D-012](DECISIONS.md#d-012--patr-definition-lock), D-014, D-026, D-027, D-028, D-029,
+  D-036, D-038 entries reflected in DECISIONS.md (D-036 and D-038 are the
+  data-handling leakage probes from the v1 audit)
 
 ---
 
@@ -602,7 +600,7 @@ def average_uniqueness(label_spans: np.ndarray) -> np.ndarray:
     """LdP ch.4 average uniqueness per sample.
 
     label_spans: shape (n, 2), int64 — columns are (start_idx, end_idx_exclusive)
-    into the 15m decision clock. Contiguous-memory ndarray chosen (D-032) for
+    into the 15m decision clock. Contiguous-memory ndarray chosen for
     vectorized concurrency / uniqueness computation across the numpy boundary.
     """
 ```
@@ -632,7 +630,7 @@ def average_uniqueness(label_spans: np.ndarray) -> np.ndarray:
 - Concrete fold geometry (n_folds=8, anchor≈2y, test≈1Q, val≈6w) wired into
   defaults; the trial set (folds × dual arms × baselines) is the V source
   for [D-008](DECISIONS.md#d-008--success-threshold-pre-registration)
-- [D-004](DECISIONS.md#d-004--embargo-and-purging), [D-005](DECISIONS.md#d-005--sample-uniqueness-weighting), [D-010](DECISIONS.md#d-010--walk-forward-geometry), D-017, [D-032](DECISIONS.md#d-032--label_spans-representation) reflected in DECISIONS.md; D-016 status
+- [D-004](DECISIONS.md#d-004--embargo-and-purging), [D-005](DECISIONS.md#d-005--sample-uniqueness-weighting), [D-010](DECISIONS.md#d-010--walk-forward-geometry), D-017 reflected in DECISIONS.md; D-016 status
   updated to reflect the reserved scheme value
 
 ---
@@ -673,10 +671,9 @@ output exists. They are now fixed.
 
 ### Checkpoint
 
-- DECISIONS.md updated with [D-002](DECISIONS.md#d-002--decision-cadence-15m-bar-close) … [D-033](DECISIONS.md#d-033--forward-walk-vectorization-strategy) (those not already written in B.0–B.3),
+- DECISIONS.md updated with [D-002](DECISIONS.md#d-002--decision-cadence-15m-bar-close) … [D-029](DECISIONS.md#d-029--labelresult-schema-and-tail-sentinel-dtype) (those not already written in B.0–B.3),
   including the new entries for entry price ([D-027](DECISIONS.md#d-027--entry-price-convention-close-of-the-15m-bar-at-t)), intra-bar tie-break ([D-028](DECISIONS.md#d-028--1m-intra-bar-tie-break-honest-arm)),
-  `LabelResult` schema ([D-029](DECISIONS.md#d-029--labelresult-schema-and-tail-sentinel-dtype)), module layout ([D-030](DECISIONS.md#d-030--phase-b-module-layout)), pATR module location
-  ([D-031](DECISIONS.md#d-031--patr-module-location)), and forward-walk vectorization (D-033); status updates on [D-008](DECISIONS.md#d-008--success-threshold-pre-registration)
+  and `LabelResult` schema ([D-029](DECISIONS.md#d-029--labelresult-schema-and-tail-sentinel-dtype)); status updates on [D-008](DECISIONS.md#d-008--success-threshold-pre-registration)
   (pinned values, expanded V trial-set), [D-010](DECISIONS.md#d-010--walk-forward-geometry) (concrete sizing), [D-015](DECISIONS.md#d-015--labeling-event-filter-sampling-cadence) (out of
   scope for this iteration), and [D-016](DECISIONS.md#d-016--backtest-geometry-walk-forward-vs-cpcv) (scheme value reserved). The
   data-handling probes [D-036](DECISIONS.md#d-036--gap-fill-discipline-leakage-probe) (gap-fill discipline) and [D-038](DECISIONS.md#d-038--patr-fill-policy-in-label-construction-leakage-probe) (pATR fill policy

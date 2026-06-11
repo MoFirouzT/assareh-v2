@@ -34,7 +34,7 @@ assareh-v2/ (repo root)
 │       │   ├── schemas.py
 │       │   ├── loader.py
 │       │   └── integrity.py
-│       └── features/       # lands in Phase B (D-031)
+│       └── features/       # lands in Phase B
 │           ├── __init__.py
 │           └── patr.py     # B.0, multi-tf pATR
 ├── scripts/
@@ -294,7 +294,7 @@ that governs it.
 - **Timestamps.** UTC-aware throughout. Binance Vision CSVs are not
   internally consistent in timestamp encoding — the parser detects
   ms / us / s by numeric range, column-wide ([L-016](LEARNINGS.md#l-016--binance-vision-csvs-use-mixed-timestamp-encodings)). `OHLCV_SCHEMA`
-  specifies `us`-precision UTC; the loader's cast ([D-034](DECISIONS.md#d-034--loader-casts-to-canonical-schema-rather-than-asserting-exact-match)) reconciles the
+  specifies `us`-precision UTC; the loader's cast reconciles the
   pandas-Parquet ms round-trip without rejecting valid data, with the
   not-UTC-aware case backstopped as a hard integrity failure ([D-022](DECISIONS.md#d-022--integrity-check-severity-taxonomy-physically-impossible--hard-market-real--soft)).
 - **Archive integrity.** For every monthly/daily ZIP, the co-located
@@ -366,7 +366,7 @@ def load_ohlcv(
 
 Single function.
 Path comes from `settings.raw_dir`.
-Per **[D-034](DECISIONS.md#d-034--loader-casts-to-canonical-schema-rather-than-asserting-exact-match)**, the loader hard-fails if any canonical column is missing, then **casts every column to `OHLCV_SCHEMA` types** rather than asserting strict schema equality.
+The loader hard-fails if any canonical column is missing, then **casts every column to `OHLCV_SCHEMA` types** rather than asserting strict schema equality.
 Rationale: the downloader writes Parquet via pandas, which round-trips `Datetime` timestamps at `ms` precision while the canonical schema specifies `us`;
 a strict equality check would reject valid data that differs only in precision.
 The cast is paid once at load time and guarantees downstream code always sees the canonical schema (see [L-004](LEARNINGS.md#l-004--loader-must-cast-schema-rather-than-assert-exact-match)).
@@ -490,8 +490,7 @@ met; the entries below tick them off explicitly.
 - [x] All four real timeframes pass `check_integrity`; cross-timeframe
   alignment hard-failures on the known Binance pre-2018 timestamp anomaly are
   documented in [L-001](LEARNINGS.md#l-001--early-binance-1m-data-has-sub-minute-timestamp-offsets) and bounded by the test
-- [x] DECISIONS.md updated with [D-018](DECISIONS.md#d-018--grid-containment-check-modulo-arithmetic-over-presence-based-anti-join) … [D-025](DECISIONS.md#d-025--cross-timeframe-alignment-check-severity-grid-containment-hard-spacing-and-coverage-soft), [D-034](DECISIONS.md#d-034--loader-casts-to-canonical-schema-rather-than-asserting-exact-match), [D-035](DECISIONS.md#d-035--tooling-stack-this-iteration) (the tooling stack
-  is now a numbered entry, D-035; the loader-cast-vs-assert decision is D-034)
+- [x] DECISIONS.md updated with [D-018](DECISIONS.md#d-018--grid-containment-check-modulo-arithmetic-over-presence-based-anti-join) … [D-025](DECISIONS.md#d-025--cross-timeframe-alignment-check-severity-grid-containment-hard-spacing-and-coverage-soft)
 - [x] LEARNINGS.md captures L-001 (Binance timestamp offsets), [L-002](LEARNINGS.md#l-002--real-data-integrity-statistics-phase-a-baseline) (integrity
   statistics baseline), [L-003](LEARNINGS.md#l-003--ancillary-columns-are-unreliable-for-early-and-ccxt-sourced-bars) (ancillary-column unreliability), [L-004](LEARNINGS.md#l-004--loader-must-cast-schema-rather-than-assert-exact-match) (loader
   schema-cast rationale), [L-005](LEARNINGS.md#l-005--binance-vision-checksum-files-are-not-always-present) (missing CHECKSUM files)
@@ -500,7 +499,7 @@ met; the entries below tick them off explicitly.
 
 **Out of scope, deferred to later phases:**
 
-- pATR computation — moved to Phase B (B.0) per [D-031](DECISIONS.md#d-031--patr-module-location); `attach_patr` lives at
+- pATR computation — moved to Phase B (B.0); `attach_patr` lives at
   `src/assareh/features/patr.py`
 - CI workflow — **resolved**: a minimal GitHub Actions scaffold (`uv sync`
   → `ruff` → `mypy` → `pytest`) is now a Phase B deliverable in PLAN.md,
@@ -569,7 +568,7 @@ statistical-discipline leaks layer on top.
 
 **Confirmed v1 non-issues** (no v2 probe needed, recorded for completeness):
 
-- v1 uses CSV only — v2's [D-034](DECISIONS.md#d-034--loader-casts-to-canonical-schema-rather-than-asserting-exact-match) Parquet schema-cast discipline has no v1
+- v1 uses CSV only — v2's Parquet schema-cast discipline has no v1
   counterpart.
 - v1 doesn't read `number_of_trades` or `taker_buy_*` columns — v2's
   [D-020](DECISIONS.md#d-020--ccxt-tail-bars-zero-fill-missing-ancillary-columns) structural-zero handling is honest-arm-only.
