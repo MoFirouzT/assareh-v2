@@ -140,8 +140,10 @@ evaluation-harness skeleton *before* writing any model.
   the splits API for Phase C ([D-016](DECISIONS.md#d-016--backtest-geometry-walk-forward-vs-cpcv))
 - **Sample-uniqueness weighting** (López de Prado average uniqueness,
   computed on training-fold labels only) layered on top of v1's
-  class-imbalance weights, renormalized per fold to sum to `N`; **Kish-N_eff**
-  for confidence intervals on test metrics; no time decay ([D-005](DECISIONS.md#d-005--sample-uniqueness-weighting), [D-017](DECISIONS.md#d-017--time-decay-on-sample-weights))
+  class-imbalance weights, renormalized per fold to sum to `N`; the
+  **overlap-aware uniqueness-sum `N_eff` (`Σ ūᵢ`)** for confidence intervals on
+  test metrics (Kish `(Σw)²/Σw²` is retained only as a weight-dispersion
+  diagnostic — D-005 corrected, L-022); no time decay ([D-005](DECISIONS.md#d-005--sample-uniqueness-weighting), [D-017](DECISIONS.md#d-017--time-decay-on-sample-weights))
 - A `splits.py` module that's the single source of truth for what's train,
   val, and test for every fold
 - **Held-out test window reservation** (VISION deferred decision). A
@@ -226,7 +228,8 @@ Baselines first, model later — this is the methodology checkpoint.
   - **Frequency-matched random signal** — same trade count as the model, run
     through the same cost model; the real "is there an edge" control
 - Baseline numbers logged to MLflow (local file backend), with the same
-  label-overlap-aware Kish-`N_eff` CIs ([D-005](DECISIONS.md#d-005--sample-uniqueness-weighting)) applied to baseline metrics
+  label-overlap-aware uniqueness-sum `N_eff` (`Σ ūᵢ`) CIs ([D-005](DECISIONS.md#d-005--sample-uniqueness-weighting) corrected,
+  [L-022](LEARNINGS.md#l-022--kish-on-the-sample-weights-does-not-measure-label-overlap--use-the-uniqueness-sum-for-cis)) applied to baseline metrics
   as to model metrics — comparability with VISION DoD #4 requires
   apples-to-apples CIs
 - **Per-arm metric record schema** (enables the Phase E headline finding).
