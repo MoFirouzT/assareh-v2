@@ -5,7 +5,7 @@ research and engineering.
 
 ---
 
-## <a id="l-001"></a>L-001 — Early Binance 1m data has sub-minute timestamp offsets
+## L-001 — Early Binance 1m data has sub-minute timestamp offsets
 
 **Discovered:** Phase A.3 — cross-timeframe alignment check
 **Affected rows:** 21,602 of 4,598,701 1m bars; 81 of 306,588 15m bars; 43 of 76,660 1h bars; 0 of 19,179 4h bars
@@ -43,7 +43,7 @@ to these ~2 months without explicit handling.
 
 ---
 
-## <a id="l-002"></a>L-002 — Real-data integrity statistics (Phase A baseline)
+## L-002 — Real-data integrity statistics (Phase A baseline)
 
 **Discovered:** Phase A.3 — integrity checks on all four downloaded timeframes
 
@@ -60,7 +60,7 @@ observations worth knowing before Phase B/D:
 **Gap pattern.** Most of the 34 1m gaps occur just after 02:00 UTC —
 consistent with Binance scheduled maintenance. The largest gap
 (2,010 1m bars, 2018-02-08 00:28 → 2018-02-09 09:59 UTC) is the same
-platform event that introduced the +14.789 s timestamp offset (see [L-001](#l-001)).
+platform event that introduced the +14.789 s timestamp offset (see [L-001](#l-001--early-binance-1m-data-has-sub-minute-timestamp-offsets)).
 
 **Zero-volume 1m bars** (24,003 rows, 0.52% of series). The vast majority
 are from the 2017–2019 period: low-activity minutes on a then-thinly-traded
@@ -76,7 +76,7 @@ discontinuity; walk-forward fold boundaries should not straddle it.
 
 ---
 
-## <a id="l-003"></a>L-003 — Ancillary columns are unreliable for early and ccxt-sourced bars
+## L-003 — Ancillary columns are unreliable for early and ccxt-sourced bars
 
 **Discovered:** Phase A.2/A.3 — downloader code inspection and data audit
 
@@ -102,7 +102,7 @@ treating structured zeros as genuine low-activity readings.
 
 ---
 
-## <a id="l-004"></a>L-004 — Loader must cast schema rather than assert exact match
+## L-004 — Loader must cast schema rather than assert exact match
 
 **Discovered:** Phase A.3 — loader implementation
 
@@ -119,7 +119,7 @@ regardless of how the Parquet was written.
 
 ---
 
-## <a id="l-005"></a>L-005 — Binance Vision CHECKSUM files are not always present
+## L-005 — Binance Vision CHECKSUM files are not always present
 
 **Discovered:** Phase A.2 — downloader implementation
 
@@ -133,10 +133,10 @@ archive that *does* provide a checksum is verified and the hash is logged to
 
 ---
 
-## <a id="l-006"></a>L-006 — v1's `target2=True` is embedded meta-labeling — but it was a *failed experiment*
+## L-006 — v1's `target2=True` is embedded meta-labeling — but it was a *failed experiment*
 
 **Discovered:** Phase B preparation — reverse-engineering the v1 TargetExtractor family
-**Corrected:** 2026-06-09 — friend feedback + notebook verification ([L-017](#l-017))
+**Corrected:** 2026-06-09 — friend feedback + notebook verification ([L-017](#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs))
 
 > **⚠️ Correction (2026-06-09).** The mechanism described below is real — `target2=True`
 > *does* implement rule-based meta-labeling in the labeler. But the conclusion ("v2 must
@@ -145,7 +145,7 @@ archive that *does* provide a checksum is verified and the hash is logged to
 > confirm it: the labeler runs with `target2=True`, yet **every** `generate_results(...)`
 > call evaluates with `target2=False` — the meta-label was produced and then discarded.
 > So the v1-faithful Phase-B arm reproduces the **side label only** (no `target3`,
-> no `stop2`); [D-014](DECISIONS.md#d-014) stands purely as a *new* v2 idea, not a v1 reproduction. See L-017,
+> no `stop2`); [D-014](DECISIONS.md#d-014--meta-labeling-side--size-decomposition) stands purely as a *new* v2 idea, not a v1 reproduction. See L-017,
 > D-014 (corrected), and PHASE_B B.1.
 
 
@@ -177,16 +177,16 @@ parameter must be configurable (default 1, matching v1). See PHASE_B.md B.1.
 
 ---
 
-## <a id="l-007"></a>L-007 — Multi-timeframe ATR term structure: why longer-vol for target, shorter-vol for stop
+## L-007 — Multi-timeframe ATR term structure: why longer-vol for target, shorter-vol for stop
 
 **Discovered:** Phase B preparation — analyzing TargetExtractors 2–4
-**Scope-clarified:** 2026-06-09 ([L-017](#l-017))
+**Scope-clarified:** 2026-06-09 ([L-017](#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs))
 
 > **Note (2026-06-09).** The term-structure *reasoning* below is sound and retained. What
 > changed is the v2 *default*, not this finding's validity. In the `latest_code_and_results`
 > config, `TargetExtractor3` runs `target_patr=15, stop_patr=15` (15m for both), and a
 > friend who worked on v1 advises 15m-for-both ("do not use 1h/4h for now"), so MTF moves
-> to an **off-by-default, available** experiment in v2 ([D-026](DECISIONS.md#d-026) revised). This is *not* a
+> to an **off-by-default, available** experiment in v2 ([D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available) revised). This is *not* a
 > claim that MTF was never used in v1 — `latest_code_and_results` is only part of the v1
 > tree, and MTF is a real supported path that may appear in older `Assareh/` experiments.
 > Whether any reported v1 number used MTF is open pending the friend's confirmation.
@@ -215,7 +215,7 @@ This reasoning is captured as a design decision in **D-026**.
 
 ---
 
-## <a id="l-008"></a>L-008 — v1's default gap interpolation is non-causal and contaminates labels
+## L-008 — v1's default gap interpolation is non-causal and contaminates labels
 
 **Discovered:** v1 data-handling audit.
 **Affected:** every gap-crossing label in v1's training window (2017-08-28 onward), all four timeframes
@@ -228,9 +228,9 @@ This reasoning is captured as a design decision in **D-026**.
 > These two are not necessarily in conflict: `latest_code_and_results` is only part of the
 > v1 tree, and ZOH is a real v1 class that may have been the gap-fill in other experiments
 > under `Assareh/`. **Do not treat this as "the friend misremembered."** The v1-faithful
-> arm currently reproduces the non-causal weighted average it can see ([D-036](DECISIONS.md#d-036)); causal ZOH is
+> arm currently reproduces the non-causal weighted average it can see ([D-036](DECISIONS.md#d-036--gap-fill-discipline-leakage-probe)); causal ZOH is
 > added as a *separate* comparison arm anyway. **Open:** confirm with the friend which
-> gap-fill produced the v1 numbers we compare against. See [L-017](#l-017).
+> gap-fill produced the v1 numbers we compare against. See [L-017](#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs).
 
 
 v1's `BtcPreprocessor` runs `LinearInterpolator` on each timeframe before
@@ -256,7 +256,7 @@ Whenever the forward walk crosses a synthesized bar, the high/low it reads is a 
 
 **Scale of impact.**
 v1's training window starts 2017-08-28 (`0_Preprocessing.ipynb`, `first_day='2017-08-28 16:00:00'`);
-v2's [L-002](#l-002) records 34 gaps in the 1m series, the largest 33.5 h around 2018-02-08–09.
+v2's [L-002](#l-002--real-data-integrity-statistics-phase-a-baseline) records 34 gaps in the 1m series, the largest 33.5 h around 2018-02-08–09.
 Every gap is synthesized in v1, then walked by every label whose horizon spans it.
 The 511-bar (~5.3-day) horizon is wider than every observed gap except the largest, so essentially every label issued within ~5 days of a maintenance gap is contaminated.
 
@@ -265,7 +265,7 @@ The dual-arm framework requires both:
 
 - *v1-faithful arm* — reproduce the non-causal weighted interpolation
   before label construction, so v1's reported numbers are reproducible.
-- *honest arm* — leave gaps observed (per [D-024](DECISIONS.md#d-024)); barrier walks that would
+- *honest arm* — leave gaps observed (per [D-024](DECISIONS.md#d-024--gap-handling-soft-observation-never-forward-fill)); barrier walks that would
   cross an unfilled gap return a typed-null label (no decision) for that
   sample.
 
@@ -280,7 +280,7 @@ the gap-fill discipline arm is a feature-and-label probe, not a label-only one.
 
 ---
 
-## <a id="l-009"></a>L-009 — v1's `DataMixer.load_features` applies blanket `bfill` to every feature column
+## L-009 — v1's `DataMixer.load_features` applies blanket `bfill` to every feature column
 
 **Discovered:** v1 data-handling audit
 **Affected:** every NaN cell in every feature column across v1's feature matrix
@@ -316,9 +316,9 @@ model's earliest training samples are entirely back-filled from future.
   batch sampler so warm-up rows are excluded rather than back-filled.
 
 The gap is the inflation v1's blanket `bfill` introduced. This is the
-second new leakage-probe candidate ([D-037](DECISIONS.md#d-037), to follow).
+second new leakage-probe candidate ([D-037](DECISIONS.md#d-037--feature-frame-nan-policy-leakage-probe), to follow).
 
-**Relationship to [L-008](#l-008).** L-008's interpolated bars and L-009's `bfill`
+**Relationship to [L-008](#l-008--v1s-default-gap-interpolation-is-non-causal-and-contaminates-labels).** L-008's interpolated bars and L-009's `bfill`
 operate on different NaN sources but compound: a gap creates NaN cells
 that the interpolator fills with future-weighted synthetics, and any NaN
 that slips through gets `bfill`'d at the `DataMixer` stage. Both must be
@@ -335,13 +335,13 @@ disabled in the honest arm; the v1-faithful arm reproduces both.
 
 ---
 
-## <a id="l-010"></a>L-010 — v1's `patr*` series is `ffill`+`bfill`'d *inside* `TargetExtractor2/3`
+## L-010 — v1's `patr*` series is `ffill`+`bfill`'d *inside* `TargetExtractor2/3`
 
 **Discovered:** v1 data-handling audit
 **Affected:** label resolution wherever a pATR cell was NaN at compute time
 
 The triple-barrier label depends on `patr_15`, `patr_60`, `patr_240`
-(per [D-026](DECISIONS.md#d-026): longer-horizon for the profit target, shorter for the stop).
+(per [D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available): longer-horizon for the profit target, shorter for the stop).
 v1's `TargetExtractor2` and `TargetExtractor3` apply `ffill` followed by
 `bfill` to these pATR series *as part of the label-construction step* —
 so any pATR cell that was NaN at label time gets filled, and the fill
@@ -369,14 +369,14 @@ treat as honest out-of-sample bars.
   or before `t`. Bars with NaN pATR (series start, gap-adjacent) emit a
   typed-null label, not a fabricated one.
 
-This is structurally similar to [L-009](#l-009)'s `DataMixer` `bfill` but operates
+This is structurally similar to [L-009](#l-009--v1s-datamixerload_features-applies-blanket-bfill-to-every-feature-column)'s `DataMixer` `bfill` but operates
 on the *labeling pathway* rather than the feature pathway, so the inflation
 appears in the target distribution rather than the feature matrix.
-DECISIONS.md entry [D-038](DECISIONS.md#d-038) will own it.
+DECISIONS.md entry [D-038](DECISIONS.md#d-038--patr-fill-policy-in-label-construction-leakage-probe) will own it.
 
 ---
 
-## <a id="l-011"></a>L-011 — v1 mixes multi-TF samples by counter-walking, not by timestamp join
+## L-011 — v1 mixes multi-TF samples by counter-walking, not by timestamp join
 
 **Discovered:** v1 data-handling audit
 **Affected:** every multi-TF training sample produced by `DataMixer3._mix_train`
@@ -390,8 +390,8 @@ timestamp check is absent.
 
 The assumption baked in is that coverage is uniform across timeframes.
 If even one timeframe has more or fewer bars than expected — because of
-a missing day, a snapped row dropped ([L-012](#l-012)), or a quirk-window
-realignment ([L-001](#l-001)) — the counters drift relative to wall-clock time and
+a missing day, a snapped row dropped ([L-012](#l-012--v1-silently-floor-snaps-off-grid-bars-per-timeframe-including-the-binance-quirk-window)), or a quirk-window
+realignment ([L-001](#l-001--early-binance-1m-data-has-sub-minute-timestamp-offsets)) — the counters drift relative to wall-clock time and
 **bars from different real timestamps get stitched together as if
 aligned**. The drift is silent and cumulative.
 
@@ -405,20 +405,20 @@ aligned**. The drift is silent and cumulative.
 
 - *v1-faithful arm* — reproduce the counter-walked mix.
 - *honest arm* — assemble multi-TF features via `merge_asof` on the 15m
-  decision clock (backward direction, strict; per [D-030](DECISIONS.md#d-030)'s existing
+  decision clock (backward direction, strict; per [D-030](DECISIONS.md#d-030--phase-b-module-layout)'s existing
   alignment rules). Any timeframe that doesn't have a bar at or before
   the decision bar emits a typed-null cell.
 
-Distinct from [L-008](#l-008) and [L-009](#l-009): the gap-fill and `bfill` probes are about
+Distinct from [L-008](#l-008--v1s-default-gap-interpolation-is-non-causal-and-contaminates-labels) and [L-009](#l-009--v1s-datamixerload_features-applies-blanket-bfill-to-every-feature-column): the gap-fill and `bfill` probes are about
 *missing* data, while this probe is about *misaligned* data. DECISIONS.md
-entry [D-039](DECISIONS.md#d-039) will own it.
+entry [D-039](DECISIONS.md#d-039--cross-timeframe-alignment-method-leakage-probe) will own it.
 
 ---
 
-## <a id="l-012"></a>L-012 — v1 silently floor-snaps off-grid bars per-timeframe, including the Binance quirk window
+## L-012 — v1 silently floor-snaps off-grid bars per-timeframe, including the Binance quirk window
 
 **Discovered:** v1 data-handling audit
-**Affected:** the same off-grid rows v2's [L-001](#l-001) documents (~21k 1m bars,
+**Affected:** the same off-grid rows v2's [L-001](#l-001--early-binance-1m-data-has-sub-minute-timestamp-offsets) documents (~21k 1m bars,
 ~81 15m bars, ~43 1h bars in 2017-12-04 → 2018-02-10)
 
 v1's `LinearInterpolator._adjust_dataframe_indices` walks each timeframe
@@ -450,12 +450,12 @@ covers the entire Binance-quirk period):
 
 **Implication for v2.** Reinforces both:
 
-- [D-025](DECISIONS.md#d-025) (cross-TF alignment check severity) — v2's hard-failure mode on
+- [D-025](DECISIONS.md#d-025--cross-timeframe-alignment-check-severity-grid-containment-hard-spacing-and-coverage-soft) (cross-TF alignment check severity) — v2's hard-failure mode on
   off-grid opens is the right default; the L-001 quirk window is the
   one documented exception.
-- [D-039](DECISIONS.md#d-039) (cross-TF alignment method, to follow) — the per-TF independent
+- [D-039](DECISIONS.md#d-039--cross-timeframe-alignment-method-leakage-probe) (cross-TF alignment method, to follow) — the per-TF independent
   snap is a defect, not just a fill choice, because it gives v1's
-  counter-walk mixer ([L-011](#l-011)) the illusion that the four timeframes are
+  counter-walk mixer ([L-011](#l-011--v1-mixes-multi-tf-samples-by-counter-walking-not-by-timestamp-join)) the illusion that the four timeframes are
   aligned when they aren't.
 
 No standalone probe; this finding feeds the D-039 implementation and the
@@ -464,7 +464,7 @@ quirk window") already noted in L-001.
 
 ---
 
-## <a id="l-013"></a>L-013 — v1 has no OHLC arithmetic check at any stage
+## L-013 — v1 has no OHLC arithmetic check at any stage
 
 **Discovered:** v1 data-handling audit
 **Affected:** any bar where `high < max(open, close)` or `low > min(open, close)`
@@ -487,8 +487,8 @@ Consequences for v1's pipeline:
   An out-of-order high/low silently changes which barrier wins.
 
 **Implication for v2.** v2's `check_integrity` already hard-fails on
-OHLC arithmetic violations ([D-022](DECISIONS.md#d-022)); v2's loaded data has zero such bars
-([L-002](#l-002)). The finding doesn't motivate a new probe — it's a quality bar
+OHLC arithmetic violations ([D-022](DECISIONS.md#d-022--integrity-check-severity-taxonomy-physically-impossible--hard-market-real--soft)); v2's loaded data has zero such bars
+([L-002](#l-002--real-data-integrity-statistics-phase-a-baseline)). The finding doesn't motivate a new probe — it's a quality bar
 v1 didn't enforce and v2 does. Worth a row in the gap artifact's
 "data-quality discipline" column if any v1 bar turns out to violate the
 relation; otherwise the entry stands as documentation that v2's hard
@@ -496,7 +496,7 @@ check is a real divergence from v1's permissive flow.
 
 ---
 
-## <a id="l-014"></a>L-014 — v1 silently clamps `volume < 1` to 1
+## L-014 — v1 silently clamps `volume < 1` to 1
 
 **Discovered:** v1 data-handling audit
 **Affected:** every zero-volume or sub-1 bar in v1's training data
@@ -510,7 +510,7 @@ how many bars are clamped, no flag column.
 The mechanical reason is downstream `log(volume)` — the clamp makes
 `log_volume = 0` for clamped bars rather than `-inf` or NaN. The
 practical consequence is that **every legitimate zero-volume minute in
-2017–2019** (~24k bars in v2's [L-002](#l-002) count, ~0.52% of the 1m series)
+2017–2019** (~24k bars in v2's [L-002](#l-002--real-data-integrity-statistics-phase-a-baseline) count, ~0.52% of the 1m series)
 reads as `log_volume = 0` in v1's feature matrix, indistinguishable from
 a bar with `volume = 1`.
 
@@ -531,7 +531,7 @@ should be applied at the indicator level for volume-based features.
 
 ---
 
-## <a id="l-015"></a>L-015 — Minor v1 fill and convention behaviors (catch-all)
+## L-015 — Minor v1 fill and convention behaviors (catch-all)
 
 **Discovered:** v1 data-handling audit (cross-cutting observations)
 
@@ -544,15 +544,15 @@ them as surprises.
   `_adjust_dataframe_indices` snaps a bar to the floor of its
   timeframe and the snap collides with an existing on-grid bar, the
   snapped duplicate is moved past `last_day` and dropped, counted in
-  `number_of_candles_with_two_index`. No hard fail. Subsumed by [L-012](#l-012).
+  `number_of_candles_with_two_index`. No hard fail. Subsumed by [L-012](#l-012--v1-silently-floor-snaps-off-grid-bars-per-timeframe-including-the-binance-quirk-window).
   v1: `btc_feature_engineering_utils.py:326-348`.
 - **Silent sort after interpolation.** v1 calls `sort_index(inplace=True)`
   after interpolation steps; ordering is auto-corrected rather than
   validated. v1: `:317`, `:460`; initial CSV ingest at `:70`.
 - **Silent `bfill` of NaN OHLC and NaN volume.** Any NaN that survives
   the interpolator is back-filled at the `DataMixer.load_features`
-  stage ([L-009](#l-009)). For NaN volume specifically: the `volume < 1` clamp
-  in [L-014](#l-014) doesn't catch NaN (since `NaN < 1` is False), so a NaN
+  stage ([L-009](#l-009--v1s-datamixerload_features-applies-blanket-bfill-to-every-feature-column)). For NaN volume specifically: the `volume < 1` clamp
+  in [L-014](#l-014--v1-silently-clamps-volume--1-to-1) doesn't catch NaN (since `NaN < 1` is False), so a NaN
   volume row flows past the clamp into the `bfill`.
 - **Timezone-naïve timestamps throughout.** CSV ingest parses
   `pd.to_datetime(..., format="%Y-%m-%d %H:%M:%S")` with no tz
@@ -564,7 +564,7 @@ them as surprises.
   conversion — so if the seed ran on a non-UTC server the entire
   `time_stamp` axis is shifted by the local UTC offset. Django
   `TIME_ZONE = 'UTC'` is set but only governs the ORM layer.
-  v2 enforces UTC at the loader ([D-021](DECISIONS.md#d-021)).
+  v2 enforces UTC at the loader ([D-021](DECISIONS.md#d-021--ohlcv-schema-9-columns)).
 - **`_create_log_alternative_candles` first-row `fillna('backfill')`.**
   `log_diff.shift(1).fillna(method='backfill')` ensures the first row
   of log-stationary features is populated — by *future* data. Look-ahead
@@ -573,18 +573,18 @@ them as surprises.
 - **Sentinel `fillna(value=33)` for target frames.** v1's target
   pipeline writes `df.fillna(value=33, inplace=True)` to mark
   no-decision bars (v1: `:706`, `:883`, `:1096`, `:1321`, `:1486`).
-  Functional in v1; v2 uses typed-null sentinels ([D-029](DECISIONS.md#d-029)) instead.
+  Functional in v1; v2 uses typed-null sentinels ([D-029](DECISIONS.md#d-029--labelresult-schema-and-tail-sentinel-dtype)) instead.
   Worth knowing if v1's reported metrics include or exclude
   sentinel rows.
 - **`v1 confirmed non-issues` (no action in v2).** Per the audit:
-  v1 never reads `number_of_trades` / `taker_buy_*` (#17 — [D-020](DECISIONS.md#d-020)'s
+  v1 never reads `number_of_trades` / `taker_buy_*` (#17 — [D-020](DECISIONS.md#d-020--ccxt-tail-bars-zero-fill-missing-ancillary-columns)'s
   honest-arm guard has no v1 counterpart), v1 has no archive
   integrity verification (#18), and v1 fetches from a single source
   with no cross-verification (#21). These are v2-only disciplines.
 
 ---
 
-## <a id="l-016"></a>L-016 — Binance Vision CSVs use mixed timestamp encodings
+## L-016 — Binance Vision CSVs use mixed timestamp encodings
 
 **Discovered:** Phase A.2 — downloader implementation
 
@@ -617,11 +617,11 @@ documented as such (scripts/data_downloader.py:378).
 of which encoding Binance happened to publish for a given archive. The
 guard is local to Vision CSV parsing; no downstream code needs to be aware
 of it, because `OHLCV_SCHEMA` pins the final dtype at the loader boundary
-([D-034](DECISIONS.md#d-034)).
+([D-034](DECISIONS.md#d-034--loader-casts-to-canonical-schema-rather-than-asserting-exact-match)).
 
 ---
 
-## <a id="l-017"></a>L-017 — Reading v1's `latest_code_and_results` notebooks refines (does not overturn) several docs
+## L-017 — Reading v1's `latest_code_and_results` notebooks refines (does not overturn) several docs
 
 **Discovered:** 2026-06-09 — friend feedback on Phase A/B prompted a direct read of
 v1's production notebooks, not just the `TargetExtractor` class definitions.
@@ -636,7 +636,7 @@ v1's production notebooks, not just the `TargetExtractor` class definitions.
 > drop `target2`; use 15m pATR for now) we act on it; otherwise we keep both
 > possibilities open until he confirms.
 
-Earlier Phase-B prep entries ([L-006](#l-006), [L-007](#l-007)) and [D-026](DECISIONS.md#d-026) were written from the
+Earlier Phase-B prep entries ([L-006](#l-006--v1s-target2true-is-embedded-meta-labeling--but-it-was-a-failed-experiment), [L-007](#l-007--multi-timeframe-atr-term-structure-why-longer-vol-for-target-shorter-vol-for-stop)) and [D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available) were written from the
 `TargetExtractor` *class* code. Reading what these notebooks actually
 **instantiate** refines some of them. Every notebook in `latest_code_and_results`
 (`0_Preprocessing.ipynb`, `E1_Bulk`, `E2_Default`, `E4_LossFn`, `E6_Single`)
@@ -661,10 +661,10 @@ Other observations from the same read:
 - **Horizon `n = 16×16×2−1 = 511`** is the value in this config
   (`btc_feature_engineering_utils.py:1080`). Friend recommends ~2–4 candles of
   the two-steps-higher timeframe (for 15m → ~3×4h ≈ 48 bars); v2 default moves to
-  48, 511 kept as the v1-faithful value ([D-003](DECISIONS.md#d-003) added detail).
+  48, 511 kept as the v1-faithful value ([D-003](DECISIONS.md#d-003--vertical-barrier-horizon-length-and-no-touch-handling) added detail).
 - **Gap fill** here is `LinearInterpolator(causal=False)` (non-causal weighted
   average); `ZeroOrderHold` exists in the codebase but isn't called on this path.
-  Whether ZOH was used in other v1 experiments is open ([L-008](#l-008) note).
+  Whether ZOH was used in other v1 experiments is open ([L-008](#l-008--v1s-default-gap-interpolation-is-non-causal-and-contaminates-labels) note).
 
 **Methodological lesson (the real takeaway).** Two cautions, both from the user's
 feedback: (1) class defaults ≠ what was run, so pin v1-faithful params to the
@@ -677,8 +677,8 @@ verdicts.
 **`consider_res=True` is a v1 feature to fold into the plan.** The config sets
 `consider_res=True`, which gates labels on trend-residual columns (`d_resi`,
 `g_resi`, `d_supi`) via a `qualified` flag inside the labeler — an
-event-qualification step distinct from [D-015](DECISIONS.md#d-015)'s (rejected) CUSUM filter. Per the
-user's instruction this is now represented in the plan as **[D-040](DECISIONS.md#d-040)** (PHASE_B B.1
+event-qualification step distinct from [D-015](DECISIONS.md#d-015--labeling-event-filter-sampling-cadence)'s (rejected) CUSUM filter. Per the
+user's instruction this is now represented in the plan as **[D-040](DECISIONS.md#d-040--v1s-qualified-event-filter-consider_res)** (PHASE_B B.1
 and PLAN Phase B).
 
 ---
@@ -687,7 +687,7 @@ and PLAN Phase B).
 
 Friend feedback on L-011: in v1, candles are merged by **index**, but the
 preceding preprocessing was deliberately built so the per-timeframe indices line
-up. If v2 aligns by **timestamp** instead ([D-039](DECISIONS.md#d-039)'s `merge_asof`), the join must
+up. If v2 aligns by **timestamp** instead ([D-039](DECISIONS.md#d-039--cross-timeframe-alignment-method-leakage-probe)'s `merge_asof`), the join must
 respect that a higher-timeframe bar only becomes known at its **close**: "if one
 timeframe's scale is 4× another, the larger bar should be matched to the smaller
 bars at/after it completes" (the friend's "5–8 sub-bars" phrasing is ambiguous

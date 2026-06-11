@@ -15,7 +15,7 @@ artifact names will be added in a later pass.
 ## Index
 
 **Triple-barrier labelling.**
-[First-touch resolution](#first-touch) ·
+[First-touch resolution](#first-touch-resolution-1m-vs-15m) ·
 [Horizon barrier](#horizon-barrier) ·
 [Profit barrier](#profit-barrier) ·
 [`rt3`](#rt3) ·
@@ -23,40 +23,40 @@ artifact names will be added in a later pass.
 [`stop2`](#stop2) ·
 [`target3`](#target3) ·
 [Triple-barrier target](#triple-barrier-target) ·
-[`up_first` flag](#up-first)
+[`up_first` flag](#up_first-flag)
 
 **Volatility (ATR family).**
-[MTF pATR](#mtf-patr) ·
-[pATR](#patr) ·
-[pTR](#ptr) ·
+[MTF pATR](#mtf-patr-multi-timeframe-asymmetry) ·
+[pATR](#patr-percent-atr) ·
+[pTR](#ptr-percent-true-range) ·
 [`shift(3)` lag](#shift3-lag) ·
 [Wilder smoothing](#wilder-smoothing)
 
 **Trading economics primer.**
-[Deflated Sharpe Ratio](#dsr) ·
+[Deflated Sharpe Ratio](#deflated-sharpe-ratio-dsr) ·
 [Drawdown](#drawdown) ·
 [Payoff](#payoff) ·
-[Sharpe ratio](#sharpe) ·
+[Sharpe ratio](#sharpe-ratio) ·
 [Slippage](#slippage) ·
-[Sortino ratio](#sortino) ·
-[Transaction cost](#transaction-cost)
+[Sortino ratio](#sortino-ratio) ·
+[Transaction cost](#transaction-cost-taker--maker-fee)
 
 **Evaluation & sample geometry.**
-[Average uniqueness](#avg-uniqueness) ·
-[Effective sample size](#eff-sample-size) ·
+[Average uniqueness](#average-uniqueness--label-overlap) ·
+[Effective sample size](#effective-sample-size) ·
 [Embargo](#embargo) ·
-[Frequency-matched random signal](#freq-matched-random) ·
-[Hard failure / Soft observation](#hard-soft) ·
-[Payoff-implied breakeven rate](#breakeven-rate) ·
+[Frequency-matched random signal](#frequency-matched-random-signal) ·
+[Hard failure / Soft observation](#hard-failure--soft-observation) ·
+[Payoff-implied breakeven rate](#payoff-implied-breakeven-rate) ·
 [Purging](#purging) ·
-[Reward : risk](#reward-risk) ·
+[Reward : risk](#reward--risk) ·
 [Walk-forward CV](#walk-forward-cv)
 
 ---
 
 ## Triple-barrier labelling
 
-### <a id="triple-barrier-target"></a>Triple-barrier target
+### Triple-barrier target
 
 A path-dependent label: for each entry timestamp `t`, place three barriers
 ahead of `t` — a profit barrier above, a stop barrier below, and a horizon
@@ -64,30 +64,30 @@ barrier at `t + H` bars — then label the bar by **which barrier price
 touches first**. Outcomes are `+1` (profit), `−1` (stop), or `0` (horizon,
 no-touch). v1's three-class scheme is rebuilt cleanly in Phase B.
 
-### <a id="profit-barrier"></a>Profit barrier
+### Profit barrier
 
 `profit_level = (1 + m_target × target_patr) × entry_price`
 
 The level above the entry at which a position is considered to have hit its
 take-profit. Default `m_target = 4`. The choice of `target_patr` (which
-pATR timeframe scales the target) is governed by **[D-026](DECISIONS.md#d-026)**.
+pATR timeframe scales the target) is governed by **[D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available)**.
 
-### <a id="stop-barrier"></a>Stop barrier
+### Stop barrier
 
 `stop_level = (1 − m_stop × stop_patr) × entry_price`
 
 The level below the entry at which the position is considered to have hit
 its stop-loss. Default `m_stop = 2.5`. The choice of `stop_patr` is governed
-by **[D-026](DECISIONS.md#d-026)**.
+by **[D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available)**.
 
-### <a id="horizon-barrier"></a>Horizon barrier
+### Horizon barrier
 
 The time bound on the label: if neither the profit nor the stop barrier is
 touched within the horizon window, the label resolves to `0` (no-touch).
 Default horizon ≈ 510 bars at the 15m decision cadence (≈ 5.3 days), inherited
 from v1's `TargetExtractor3`.
 
-### <a id="first-touch"></a>First-touch resolution (1m vs 15m)
+### First-touch resolution (1m vs 15m)
 
 When both the profit and the stop barrier sit inside a single 15m candle's
 high–low range, the order of touch is ambiguous from that bar's OHLC alone.
@@ -100,36 +100,36 @@ Two resolutions exist:
   range, assume the favourable side was hit first. Retained as a comparison
   configuration for measuring the inflation v1's heuristic produced.
 
-Verdict and rationale live in **[D-006](DECISIONS.md#d-006)**.
+Verdict and rationale live in **[D-006](DECISIONS.md#d-006--barrier-touch-resolution-source)**.
 
-### <a id="up-first"></a>`up_first` flag
+### `up_first` flag
 
 A per-bar directional flag derived from the 1m sub-candles inside each
 higher-timeframe bar: `1` if the bar's high was reached *before* its low
 (net upward intra-bar path), `0` otherwise. Makes the true range
 **directional** by selecting which of the gap terms (`|H − C_prev|` vs.
 `|L − C_prev|`) is "active." A v1 design choice, not standard Wilder ATR,
-preserved in **[D-012](DECISIONS.md#d-012)** and consumed by the 1m first-touch resolution
-(**[D-006](DECISIONS.md#d-006)**).
+preserved in **[D-012](DECISIONS.md#d-012--patr-definition-lock)** and consumed by the 1m first-touch resolution
+(**[D-006](DECISIONS.md#d-006--barrier-touch-resolution-source)**).
 
-### <a id="rt3"></a>`rt3`
+### `rt3`
 
 The **raw first-crossing label** — the *side label*, primary. Answers
 "which barrier did price touch first?" Values: `+1` profit / `0` no-touch
-/ `−1` stop. Stored on `LabelResult` (**[D-029](DECISIONS.md#d-029)**).
+/ `−1` stop. Stored on `LabelResult` (**[D-029](DECISIONS.md#d-029--labelresult-schema-and-tail-sentinel-dtype)**).
 
-### <a id="target3"></a>`target3`
+### `target3`
 
 The **meta-label** — a filtered version of `rt3`. Set to `rt3` when the
 profit target is touched cleanly; set to `0` when the slack-expanded stop
 (see [`stop2`](#stop2)) is touched first, flagging the trade as ambiguous.
 Maps onto López de Prado's meta-labeling framework (AFML Ch. 3.6) — `rt3` is
 the primary label (side), `target3` is `𝟙[primary's bet paid off under
-tighter risk control]`. See LEARNINGS [L-006](LEARNINGS.md#l-006) for the discovery; **[D-014](DECISIONS.md#d-014)**
+tighter risk control]`. See LEARNINGS [L-006](LEARNINGS.md#l-006--v1s-target2true-is-embedded-meta-labeling--but-it-was-a-failed-experiment) for the discovery; **[D-014](DECISIONS.md#d-014--meta-labeling-side--size-decomposition)**
 makes the meta-labeling step a learned model in v2 while keeping `target3`
 as the reproduction target on the v1 side.
 
-### <a id="stop2"></a>`stop2`
+### `stop2`
 
 `stop2_level = (1 − (m_stop + slack) × stop_patr) × entry_price`
 
@@ -143,7 +143,7 @@ v1's embedded meta-labeling.
 
 ## Volatility (ATR family)
 
-### <a id="patr"></a>pATR (percent ATR)
+### pATR (percent ATR)
 
 A **price-normalized form of the Average True Range** — each true-range
 component is divided by a reference price, making the series a *ratio*
@@ -152,10 +152,10 @@ directly to the model as a stationary feature and why barrier multipliers
 (`4 × pATR`, `2.5 × pATR`) are dimensionless.
 
 `pATR` is the [Wilder-smoothed](#wilder-smoothing) average of
-[`pTR`](#ptr) over `window = 10` bars. The v1 formula is
-locked in **[D-012](DECISIONS.md#d-012)**.
+[`pTR`](#ptr-percent-true-range) over `window = 10` bars. The v1 formula is
+locked in **[D-012](DECISIONS.md#d-012--patr-definition-lock)**.
 
-### <a id="ptr"></a>pTR (percent true range)
+### pTR (percent true range)
 
 The per-bar percent true range. From v1's `ta_utils.py:41`
 (`p_true_range`):
@@ -167,9 +167,9 @@ tr3 = |low  − prev_close| / prev_close
 pTR = max(tr1, tr2, tr3)
 ```
 
-`up_bar` is determined by the [`up_first`](#up-first) flag.
+`up_bar` is determined by the [`up_first`](#up_first-flag) flag.
 
-### <a id="wilder-smoothing"></a>Wilder smoothing
+### Wilder smoothing
 
 Exponential moving average with decay `α = 1/n`:
 
@@ -179,14 +179,14 @@ pATR[i] = (pATR[i−1] × (n − 1) + pTR[i]) / n,   with n = 10
 
 Equivalent to `EMA(pTR, span = 2n − 1)` in the standard `2 / (span + 1)`
 convention. Source: J. Welles Wilder, *New Concepts in Technical Trading
-Systems* (1978). Locked in **[D-012](DECISIONS.md#d-012)**.
+Systems* (1978). Locked in **[D-012](DECISIONS.md#d-012--patr-definition-lock)**.
 
-### <a id="mtf-patr"></a>MTF pATR (multi-timeframe asymmetry)
+### MTF pATR (multi-timeframe asymmetry)
 
 > **⚠️ Status (2026-06-09): available experiment, not the v2 default.** The v2
 > default is **15m pATR for both barriers** (`target_patr_col == stop_patr_col ==
 > patr_15`), per the friend's recommendation and the `latest_code_and_results`
-> config ([D-026](DECISIONS.md#d-026) revised, [L-017](LEARNINGS.md#l-017)). The MTF asymmetry below is kept **available**
+> config ([D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available) revised, [L-017](LEARNINGS.md#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs)). The MTF asymmetry below is kept **available**
 > (off by default), not discarded — it is a real v1 code path that may have been
 > used in other v1 experiments; that is unconfirmed pending the friend.
 
@@ -200,24 +200,24 @@ configuration would have the two barriers use **different** pATR timeframes:
 - **Shorter-horizon pATR scales the stop** (reactive — tightens in volatile
   regimes, widens in calm ones).
 
-The term-structure reasoning (LEARNINGS [L-007](LEARNINGS.md#l-007)) is sound and retained; it is simply
+The term-structure reasoning (LEARNINGS [L-007](LEARNINGS.md#l-007--multi-timeframe-atr-term-structure-why-longer-vol-for-target-shorter-vol-for-stop)) is sound and retained; it is simply
 not the v2 default. `patr_240`/`patr_60` remain available for a deliberate,
 separately reported experiment if B.2 diagnostics motivate it.
 
-### <a id="shift3-lag"></a>`shift(3)` lag
+### `shift(3)` lag
 
 Higher-timeframe pATR series are lagged by **3 bars of the higher timeframe**
 before being joined onto the 15m decision clock. Prevents current-bar
 bleed — the guarantee is that no row of the 15m frame sees a
 higher-timeframe pATR value that depends on data from after that row's
-timestamp. v1 design, preserved in **[D-012](DECISIONS.md#d-012)**; exact mechanics of "3 bars of
+timestamp. v1 design, preserved in **[D-012](DECISIONS.md#d-012--patr-definition-lock)**; exact mechanics of "3 bars of
 which clock" are pending Q4 of PHASE_B.B.0.
 
 ---
 
 ## Trading economics primer
 
-### <a id="payoff"></a>Payoff
+### Payoff
 
 The amount a trade gains (positive) or loses (negative) per unit, expressed
 in some common scale. For this project the natural unit is multiples of pATR:
@@ -226,7 +226,7 @@ at −2.5 × pATR has payoff −2.5. **"Payoff-implied"** anywhere in the docs
 means *derived from the structural reward and risk of the trade design*, not
 from realized P&L on backtest data.
 
-### <a id="drawdown"></a>Drawdown
+### Drawdown
 
 The peak-to-trough decline in cumulative P&L (or equity) over some window.
 **Max drawdown** is the largest such decline observed across the backtest —
@@ -239,7 +239,7 @@ operationally harder to deploy — investors and the trader alike abandon
 strategies in deep drawdown even when they remain positive in expectation.
 Listed as a Phase C metric.
 
-### <a id="slippage"></a>Slippage
+### Slippage
 
 The difference between the price assumed for a trade in backtest (e.g., the
 bar's close) and the price the trade would actually fill at on a live
@@ -251,10 +251,10 @@ exchange. Three sources:
 - **Bid–ask spread** — crossed on entry and again on exit.
 
 v2 models slippage as a per-trade cushion conservatively sized to sub-1m
-touch ambiguity; the exact form is locked when [D-011](DECISIONS.md#d-011)'s cost model is fixed
+touch ambiguity; the exact form is locked when [D-011](DECISIONS.md#d-011--cost-model)'s cost model is fixed
 in Phase C.
 
-### <a id="transaction-cost"></a>Transaction cost (taker / maker fee)
+### Transaction cost (taker / maker fee)
 
 The fee an exchange charges to execute a trade. **Taker fees** apply when the
 order crosses the book — a market order, or a limit order that fills
@@ -266,7 +266,7 @@ lower (sometimes zero or even a negative rebate); taker fees are higher
 throughout** — decisions fire at bar close, which is operationally a
 market-like order, not a passive resting one.
 
-### <a id="sharpe"></a>Sharpe ratio
+### Sharpe ratio
 
 The standard risk-adjusted return metric. Mean excess return divided by the
 standard deviation of returns, annualized:
@@ -280,7 +280,7 @@ thumb for trading strategies (annualized, net of costs): > 1 is good, > 2 is
 excellent, > 3 deserves suspicion — strategies advertising Sharpe > 3 are
 usually overfit, leveraged, or measured over too-short a window.
 
-### <a id="sortino"></a>Sortino ratio
+### Sortino ratio
 
 A Sharpe variant that penalizes only **downside** volatility. The denominator
 is the standard deviation of returns *below a target* (commonly zero or the
@@ -295,7 +295,7 @@ upside volatility — which is rarely what an investor actually wants.
 Strategies with asymmetric payoff profiles (like this project's 4 : 2.5
 reward : risk) typically have higher Sortino than Sharpe.
 
-### <a id="dsr"></a>Deflated Sharpe Ratio (DSR)
+### Deflated Sharpe Ratio (DSR)
 
 A Sharpe-ratio adjustment for **multiple-testing inflation** — the fact that
 the best Sharpe out of *N* tried configurations is biased upward by
@@ -303,14 +303,14 @@ selection even when none of the configurations actually have an edge. From
 López de Prado, AFML Ch. 14. DSR estimates the *probability that the true
 Sharpe exceeds a benchmark*, given the number of trials, the variance and
 skew of the realized returns, and the empirical Sharpe observed. Functions
-as the headline "is this Sharpe trustworthy?" number. **[D-008](DECISIONS.md#d-008)** requires
+as the headline "is this Sharpe trustworthy?" number. **[D-008](DECISIONS.md#d-008--success-threshold-pre-registration)** requires
 `DSR > 0.95` as part of the project's pre-registered success threshold.
 
 ---
 
 ## Evaluation & sample geometry
 
-### <a id="walk-forward-cv"></a>Walk-forward CV
+### Walk-forward CV
 
 Chronological cross-validation: train on a contiguous prefix, validate on
 the next chronological window, test on the window after that, then slide
@@ -320,22 +320,22 @@ The primary configuration is multi-fold walk-forward with an expanding
 training anchor; v1's single 75 / 15 / 10 chronological split is retained
 as a comparison configuration. Geometry locked in **PHASE_B.B.3**.
 
-### <a id="purging"></a>Purging
+### Purging
 
 Removal of training samples whose label-resolution windows (`[t, t1]`)
 overlap with the validation or test windows. Prevents the model from
 fitting to training labels that "know about" validation/test bars via the
 forward-window dependence of triple-barrier labels.
 
-### <a id="embargo"></a>Embargo
+### Embargo
 
 A time gap inserted on each side of the validation and test windows,
 during which training samples are dropped even if their label windows do
 not technically overlap. Guards against subtle leakage from features and
 labels that are autocorrelated across the cut. Default `embargo_bars = 511`
-per side (≈ one label-horizon at 15m). See **[D-004](DECISIONS.md#d-004)**.
+per side (≈ one label-horizon at 15m). See **[D-004](DECISIONS.md#d-004--embargo-and-purging)**.
 
-### <a id="avg-uniqueness"></a>Average uniqueness / label overlap
+### Average uniqueness / label overlap
 
 Triple-barrier labels are computed over forward windows of up to ~510 bars,
 so consecutive labels share substantial portions of their resolution windows.
@@ -343,15 +343,15 @@ so consecutive labels share substantial portions of their resolution windows.
 Learning*) measures how much of each label's window is "uniquely" its own —
 typically well below 1 for this project. Naive sample counts therefore
 overstate statistical power; honest confidence intervals must use the
-[effective sample size](#eff-sample-size) instead.
+[effective sample size](#effective-sample-size) instead.
 
-### <a id="eff-sample-size"></a>Effective sample size
+### Effective sample size
 
 The number of *statistically independent* labels, derived from average
 uniqueness. Drives the width of honest confidence intervals — naive CIs
 treat all N samples as independent and are correspondingly too narrow.
 
-### <a id="breakeven-rate"></a>Payoff-implied breakeven rate
+### Payoff-implied breakeven rate
 
 The hit rate at which a strategy with a given reward : risk ratio breaks
 even, **ignoring costs**. For the project's `4 : 2.5` reward : risk:
@@ -361,15 +361,15 @@ breakeven = stop / (target + stop) = 2.5 / (4 + 2.5) ≈ 38.5%
 ```
 
 This — not an implicit 50% — is the reference bar for "better than chance"
-in headline metrics. Locked in **[D-007](DECISIONS.md#d-007)**.
+in headline metrics. Locked in **[D-007](DECISIONS.md#d-007--breakeven-reference-385-not-50)**.
 
-### <a id="reward-risk"></a>Reward : risk
+### Reward : risk
 
 The ratio of profit-barrier distance to stop-barrier distance, both in
 pATR units. v1's default — and the project default — is `4 : 2.5`, giving
 a payoff-implied breakeven of ≈ 38.5% pre-cost.
 
-### <a id="freq-matched-random"></a>Frequency-matched random signal
+### Frequency-matched random signal
 
 A baseline that issues random `+1` / `−1` signals at **the same trade
 frequency as the candidate model**, evaluated under the same backtest
@@ -377,7 +377,7 @@ harness. Catches the trivial inflation that comes from class imbalance: any
 strategy with a non-zero hit rate beats "always abstain," but a real edge
 must beat trading at the model's own rate by random chance.
 
-### <a id="hard-soft"></a>Hard failure / Soft observation
+### Hard failure / Soft observation
 
 The two severity levels used by Phase A's integrity checks.
 

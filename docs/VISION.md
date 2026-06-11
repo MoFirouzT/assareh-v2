@@ -22,7 +22,7 @@ by a margin that survives honest evaluation, label-overlap-aware confidence inte
 
 `pATR` = **percent ATR** —
 a price-normalized (ratio) form of the Average True Range, scale-invariant across price regimes.
-The precise definition and computation are locked in [D-012](DECISIONS.md#d-012) and implemented in Phase B (B.0).
+The precise definition and computation are locked in [D-012](DECISIONS.md#d-012--patr-definition-lock) and implemented in Phase B (B.0).
 
 The target is the v1 three-class scheme (`-1` short / `0` no-touch / `+1` long), collapsed to a directional signal for headline reporting.
 
@@ -48,7 +48,7 @@ In ambitions:
    Every load-bearing claim is traceable to code, every meaningful choice to `DECISIONS.md`, every surprise to `LEARNINGS.md`.
    Typed configuration, single-command reproducibility, tests on the leakage-sensitive paths (label construction, split discipline, scaler scope), CI green on every change, and the dual-arm methodology encoded as runnable comparisons rather than rhetorical claims.
    The bar: a senior engineer reading the repo cold can locate the load-bearing decisions and trust the numbers.
-4. **(Optional) Live system.** Gated on Ambition 2 returning a positive verdict ([D-008](DECISIONS.md#d-008)'s pre-registered threshold is met).
+4. **(Optional) Live system.** Gated on Ambition 2 returning a positive verdict ([D-008](DECISIONS.md#d-008--success-threshold-pre-registration)'s pre-registered threshold is met).
    If so: a lean paper-trading loop — single-process, single-module, no orchestration layer, no database — that pulls live OHLCV, runs the trained model, and logs simulated decisions (no real money) to disk.
    Success = the loop runs continuously for an agreed window without crashing or silent drift, with every decision reproducible from the logged inputs.
    **No Django, no Celery, no DB wipes** — the v1 production complexity is a deliberate non-goal.

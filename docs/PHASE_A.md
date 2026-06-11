@@ -289,17 +289,17 @@ that governs it.
 
 - **Output.** One Parquet file per interval at
   `data/raw/btcusdt_{interval}.parquet`, zstd-compressed, columns
-  conforming to `OHLCV_SCHEMA` ([D-021](DECISIONS.md#d-021)). The downloader stays pandas
+  conforming to `OHLCV_SCHEMA` ([D-021](DECISIONS.md#d-021--ohlcv-schema-9-columns)). The downloader stays pandas
   internally; the Polars loader (A.3) consumes the Parquet.
 - **Timestamps.** UTC-aware throughout. Binance Vision CSVs are not
   internally consistent in timestamp encoding — the parser detects
-  ms / us / s by numeric range, column-wide ([L-016](LEARNINGS.md#l-016)). `OHLCV_SCHEMA`
-  specifies `us`-precision UTC; the loader's cast ([D-034](DECISIONS.md#d-034)) reconciles the
+  ms / us / s by numeric range, column-wide ([L-016](LEARNINGS.md#l-016--binance-vision-csvs-use-mixed-timestamp-encodings)). `OHLCV_SCHEMA`
+  specifies `us`-precision UTC; the loader's cast ([D-034](DECISIONS.md#d-034--loader-casts-to-canonical-schema-rather-than-asserting-exact-match)) reconciles the
   pandas-Parquet ms round-trip without rejecting valid data, with the
-  not-UTC-aware case backstopped as a hard integrity failure ([D-022](DECISIONS.md#d-022)).
+  not-UTC-aware case backstopped as a hard integrity failure ([D-022](DECISIONS.md#d-022--integrity-check-severity-taxonomy-physically-impossible--hard-market-real--soft)).
 - **Archive integrity.** For every monthly/daily ZIP, the co-located
   `.CHECKSUM` is fetched when available; SHA-256 verification is enforced
-  on presence and skipped with a warning on absence ([D-019](DECISIONS.md#d-019), [L-005](LEARNINGS.md#l-005)). Every
+  on presence and skipped with a warning on absence ([D-019](DECISIONS.md#d-019--checksum-verification-soft-on-missing-files), [L-005](LEARNINGS.md#l-005--binance-vision-checksum-files-are-not-always-present)). Every
   verified hash is appended to `data/raw/checksums.jsonl` for audit; the
   log records *only* checksums that were actually verified, so it never
   overstates coverage.
@@ -310,9 +310,9 @@ that governs it.
   larger mismatch raises and aborts the update. The three ancillary
   columns (`number_of_trades`, `taker_buy_base_volume`,
   `taker_buy_quote_volume`) are unavailable from `ccxt.fetch_ohlcv` and
-  are filled with **explicit zero** rather than NaN ([D-020](DECISIONS.md#d-020)); Phase D
+  are filled with **explicit zero** rather than NaN ([D-020](DECISIONS.md#d-020--ccxt-tail-bars-zero-fill-missing-ancillary-columns)); Phase D
   must guard these columns with a `> 0` check or `has_ancillary` flag
-  (see [L-003](LEARNINGS.md#l-003)).
+  (see [L-003](LEARNINGS.md#l-003--ancillary-columns-are-unreliable-for-early-and-ccxt-sourced-bars)).
 - **Idempotence.** The currently-forming bar is filtered before any
   merge, and merges deduplicate on `open_time`, so re-running the
   entrypoint downloads only what's new and exits cleanly with no
@@ -366,10 +366,10 @@ def load_ohlcv(
 
 Single function.
 Path comes from `settings.raw_dir`.
-Per **[D-034](DECISIONS.md#d-034)**, the loader hard-fails if any canonical column is missing, then **casts every column to `OHLCV_SCHEMA` types** rather than asserting strict schema equality.
+Per **[D-034](DECISIONS.md#d-034--loader-casts-to-canonical-schema-rather-than-asserting-exact-match)**, the loader hard-fails if any canonical column is missing, then **casts every column to `OHLCV_SCHEMA` types** rather than asserting strict schema equality.
 Rationale: the downloader writes Parquet via pandas, which round-trips `Datetime` timestamps at `ms` precision while the canonical schema specifies `us`;
 a strict equality check would reject valid data that differs only in precision.
-The cast is paid once at load time and guarantees downstream code always sees the canonical schema (see [L-004](LEARNINGS.md#l-004)).
+The cast is paid once at load time and guarantees downstream code always sees the canonical schema (see [L-004](LEARNINGS.md#l-004--loader-must-cast-schema-rather-than-assert-exact-match)).
 
 ### Integrity checks: `src/assareh/data/integrity.py`
 
@@ -484,23 +484,23 @@ met; the entries below tick them off explicitly.
 - [x] Four Parquet files on disk: `data/raw/btcusdt_{1m,15m,1h,4h}.parquet`,
   each conforming to `OHLCV_SCHEMA`
 - [x] `data/raw/checksums.jsonl` records the SHA-256 of every verified Binance
-  archive (per [D-019](DECISIONS.md#d-019) — soft on missing CHECKSUMs)
+  archive (per [D-019](DECISIONS.md#d-019--checksum-verification-soft-on-missing-files) — soft on missing CHECKSUMs)
 - [x] `from assareh.data import load_ohlcv` works; `check_integrity` and
   `check_cross_timeframe_alignment` return typed reports
 - [x] All four real timeframes pass `check_integrity`; cross-timeframe
   alignment hard-failures on the known Binance pre-2018 timestamp anomaly are
-  documented in [L-001](LEARNINGS.md#l-001) and bounded by the test
-- [x] DECISIONS.md updated with [D-018](DECISIONS.md#d-018) … [D-025](DECISIONS.md#d-025), [D-034](DECISIONS.md#d-034), [D-035](DECISIONS.md#d-035) (the tooling stack
+  documented in [L-001](LEARNINGS.md#l-001--early-binance-1m-data-has-sub-minute-timestamp-offsets) and bounded by the test
+- [x] DECISIONS.md updated with [D-018](DECISIONS.md#d-018--grid-containment-check-modulo-arithmetic-over-presence-based-anti-join) … [D-025](DECISIONS.md#d-025--cross-timeframe-alignment-check-severity-grid-containment-hard-spacing-and-coverage-soft), [D-034](DECISIONS.md#d-034--loader-casts-to-canonical-schema-rather-than-asserting-exact-match), [D-035](DECISIONS.md#d-035--tooling-stack-this-iteration) (the tooling stack
   is now a numbered entry, D-035; the loader-cast-vs-assert decision is D-034)
-- [x] LEARNINGS.md captures L-001 (Binance timestamp offsets), [L-002](LEARNINGS.md#l-002) (integrity
-  statistics baseline), [L-003](LEARNINGS.md#l-003) (ancillary-column unreliability), [L-004](LEARNINGS.md#l-004) (loader
-  schema-cast rationale), [L-005](LEARNINGS.md#l-005) (missing CHECKSUM files)
+- [x] LEARNINGS.md captures L-001 (Binance timestamp offsets), [L-002](LEARNINGS.md#l-002--real-data-integrity-statistics-phase-a-baseline) (integrity
+  statistics baseline), [L-003](LEARNINGS.md#l-003--ancillary-columns-are-unreliable-for-early-and-ccxt-sourced-bars) (ancillary-column unreliability), [L-004](LEARNINGS.md#l-004--loader-must-cast-schema-rather-than-assert-exact-match) (loader
+  schema-cast rationale), [L-005](LEARNINGS.md#l-005--binance-vision-checksum-files-are-not-always-present) (missing CHECKSUM files)
 - [x] Self-review pass: repo layout and code organization reviewed; no
   follow-up structural changes required before Phase B
 
 **Out of scope, deferred to later phases:**
 
-- pATR computation — moved to Phase B (B.0) per [D-031](DECISIONS.md#d-031); `attach_patr` lives at
+- pATR computation — moved to Phase B (B.0) per [D-031](DECISIONS.md#d-031--patr-module-location); `attach_patr` lives at
   `src/assareh/features/patr.py`
 - CI workflow — **resolved**: a minimal GitHub Actions scaffold (`uv sync`
   → `ruff` → `mypy` → `pytest`) is now a Phase B deliverable in PLAN.md,
@@ -516,25 +516,25 @@ Note: `path/file.py:LINE` is the citation into the v1 codebase.
 **Findings appended to LEARNINGS.md** (each entry includes v1 code
 citations and the implication for the affected v2 phase):
 
-- [L-008](LEARNINGS.md#l-008) — v1's default `LinearInterpolator` is non-causal (weighted
+- [L-008](LEARNINGS.md#l-008--v1s-default-gap-interpolation-is-non-causal-and-contaminates-labels) — v1's default `LinearInterpolator` is non-causal (weighted
   average of *previous and next* available bar) and contaminates the
   triple-barrier target resolution.
-- [L-009](LEARNINGS.md#l-009) — v1's `DataMixer.*.load_features` applies blanket
+- [L-009](LEARNINGS.md#l-009--v1s-datamixerload_features-applies-blanket-bfill-to-every-feature-column) — v1's `DataMixer.*.load_features` applies blanket
   `btc_df.fillna(method='bfill')` to the assembled feature frame.
-- [L-010](LEARNINGS.md#l-010) — v1's `patr*` series is `ffill`+`bfill`'d *inside*
+- [L-010](LEARNINGS.md#l-010--v1s-patr-series-is-ffillbfilld-inside-targetextractor23) — v1's `patr*` series is `ffill`+`bfill`'d *inside*
   `TargetExtractor2/3`, so barrier widths in early data depend on future
   pATR observations.
-- [L-011](LEARNINGS.md#l-011) — v1's multi-TF mix (`DataMixer3._mix_train`) walks per-TF frames
+- [L-011](LEARNINGS.md#l-011--v1-mixes-multi-tf-samples-by-counter-walking-not-by-timestamp-join) — v1's multi-TF mix (`DataMixer3._mix_train`) walks per-TF frames
   with integer counters rather than joining on timestamp; coverage drift
   silently stitches bars from different real times.
-- [L-012](LEARNINGS.md#l-012) — v1 silently floor-snaps off-grid bars per timeframe and
-  includes the [L-001](LEARNINGS.md#l-001) Binance quirk window (2017-12-04 → 2018-02-10) in
+- [L-012](LEARNINGS.md#l-012--v1-silently-floor-snaps-off-grid-bars-per-timeframe-including-the-binance-quirk-window) — v1 silently floor-snaps off-grid bars per timeframe and
+  includes the [L-001](LEARNINGS.md#l-001--early-binance-1m-data-has-sub-minute-timestamp-offsets) Binance quirk window (2017-12-04 → 2018-02-10) in
   training with no cross-TF awareness or quirk-aware exclusion.
-- [L-013](LEARNINGS.md#l-013) — v1 has no OHLC arithmetic check at any stage; broken bars feed
+- [L-013](LEARNINGS.md#l-013--v1-has-no-ohlc-arithmetic-check-at-any-stage) — v1 has no OHLC arithmetic check at any stage; broken bars feed
   ATR / BB / Donchian and the target detector unchanged.
-- [L-014](LEARNINGS.md#l-014) — v1 silently clamps `volume < 1 → 1` (so `log_volume = 0` for
+- [L-014](LEARNINGS.md#l-014--v1-silently-clamps-volume--1-to-1) — v1 silently clamps `volume < 1 → 1` (so `log_volume = 0` for
   every legitimately zero-volume bar in early data).
-- [L-015](LEARNINGS.md#l-015) — minor v1 fill and convention behaviors (catch-all): silent
+- [L-015](LEARNINGS.md#l-015--minor-v1-fill-and-convention-behaviors-catch-all) — minor v1 fill and convention behaviors (catch-all): silent
   duplicate drop on snap collision, silent sort after interpolation,
   tz-naïve timestamps throughout (with implicit local-time risk in the
   seed script `add_kick_start_data_to_db.py`),
@@ -543,15 +543,15 @@ citations and the implication for the affected v2 phase):
 
 **New dual-arm leakage probes opened** (DECISIONS.md):
 
-- [D-036](DECISIONS.md#d-036) — gap-fill discipline (label + feature pathways; motivated by L-008)
-- [D-037](DECISIONS.md#d-037) — feature-frame NaN policy (Phase D; motivated by L-009)
-- [D-038](DECISIONS.md#d-038) — pATR fill policy in label construction (Phase B; motivated by L-010)
-- [D-039](DECISIONS.md#d-039) — cross-timeframe alignment method (Phase D; motivated by L-011)
+- [D-036](DECISIONS.md#d-036--gap-fill-discipline-leakage-probe) — gap-fill discipline (label + feature pathways; motivated by L-008)
+- [D-037](DECISIONS.md#d-037--feature-frame-nan-policy-leakage-probe) — feature-frame NaN policy (Phase D; motivated by L-009)
+- [D-038](DECISIONS.md#d-038--patr-fill-policy-in-label-construction-leakage-probe) — pATR fill policy in label construction (Phase B; motivated by L-010)
+- [D-039](DECISIONS.md#d-039--cross-timeframe-alignment-method-leakage-probe) — cross-timeframe alignment method (Phase D; motivated by L-011)
 
-All four follow [D-001](DECISIONS.md#d-001)'s leakage-probe flavor (honest primary, v1-faithful
+All four follow [D-001](DECISIONS.md#d-001--dual-arm-methodology-governing-rule)'s leakage-probe flavor (honest primary, v1-faithful
 arm run *once* to measure inflation, then retired). PLAN.md's dual-arm
 catalogue was extended to two sub-groups — *statistical-discipline
-probes* ([D-004](DECISIONS.md#d-004), [D-006](DECISIONS.md#d-006), [D-010](DECISIONS.md#d-010), [D-013](DECISIONS.md#d-013)) and *data-handling probes* (D-036
+probes* ([D-004](DECISIONS.md#d-004--embargo-and-purging), [D-006](DECISIONS.md#d-006--barrier-touch-resolution-source), [D-010](DECISIONS.md#d-010--walk-forward-geometry), [D-013](DECISIONS.md#d-013--feature-selection-scope)) and *data-handling probes* (D-036
 through D-039) — and the Phase E gap artifact now reports both sub-blocks
 with a cross-block interaction view.
 
@@ -569,11 +569,11 @@ statistical-discipline leaks layer on top.
 
 **Confirmed v1 non-issues** (no v2 probe needed, recorded for completeness):
 
-- v1 uses CSV only — v2's [D-034](DECISIONS.md#d-034) Parquet schema-cast discipline has no v1
+- v1 uses CSV only — v2's [D-034](DECISIONS.md#d-034--loader-casts-to-canonical-schema-rather-than-asserting-exact-match) Parquet schema-cast discipline has no v1
   counterpart.
 - v1 doesn't read `number_of_trades` or `taker_buy_*` columns — v2's
-  [D-020](DECISIONS.md#d-020) structural-zero handling is honest-arm-only.
-- v1 doesn't verify Binance archive integrity — [D-019](DECISIONS.md#d-019) is v2-only.
+  [D-020](DECISIONS.md#d-020--ccxt-tail-bars-zero-fill-missing-ancillary-columns) structural-zero handling is honest-arm-only.
+- v1 doesn't verify Binance archive integrity — [D-019](DECISIONS.md#d-019--checksum-verification-soft-on-missing-files) is v2-only.
 - v1 fetches from a single source — the ccxt overlap-verification path
   is v2-only.
 

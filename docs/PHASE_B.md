@@ -47,8 +47,8 @@ tests/
 ## B.0 — Multi-timeframe pATR (prerequisite)
 
 `make_labels` requires the two pATR series attached to the 15m frame. The pATR
-formula is locked ([D-012](DECISIONS.md#d-012)); the multi-timeframe split is locked ([D-026](DECISIONS.md#d-026)); the
-module path is locked ([D-031](DECISIONS.md#d-031)).
+formula is locked ([D-012](DECISIONS.md#d-012--patr-definition-lock)); the multi-timeframe split is locked ([D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available)); the
+module path is locked ([D-031](DECISIONS.md#d-031--patr-module-location)).
 
 ```python
 # src/assareh/features/patr.py
@@ -73,7 +73,7 @@ def attach_patr(
 Default output adds `patr_15`, `patr_60`, `patr_240` to `df15`. Phase D may
 extend `timeframes_minutes`; Phase B's labeler needs only **`patr_15`** (both
 barriers, per D-026 revised). `patr_60` / `patr_240` are still computed so the
-optional MTF-asymmetry experiment ([L-007](LEARNINGS.md#l-007)) can be run without recomputation, but
+optional MTF-asymmetry experiment ([L-007](LEARNINGS.md#l-007--multi-timeframe-atr-term-structure-why-longer-vol-for-target-shorter-vol-for-stop)) can be run without recomputation, but
 they are not consumed by the default label path.
 
 > **Open question — Q4 (`shift(3)` mechanics).** v1's `shift(3)` lag on higher-
@@ -102,7 +102,7 @@ they are not consumed by the default label path.
 
 - `attach_patr` returns the canonical three pATR columns on the 15m frame
 - Tests pass; Q4 resolution is committed to DECISIONS.md
-- [D-012](DECISIONS.md#d-012), [D-026](DECISIONS.md#d-026), [D-031](DECISIONS.md#d-031) reflected; module path matches the layout above
+- [D-012](DECISIONS.md#d-012--patr-definition-lock), [D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available), [D-031](DECISIONS.md#d-031--patr-module-location) reflected; module path matches the layout above
 
 ---
 
@@ -115,17 +115,17 @@ The v1 three-class triple-barrier label, rebuilt cleanly with tests:
 - **Profit barrier:** +4 × pATR from entry
 - **Stop barrier:** −2.5 × pATR from entry
   *(`4 / 2.5` confirmed OK by the user, 2026-06-09; one v1 notebook used
-  `m_pt=1+√5≈3.236, m_ps=2` but we keep 4/2.5 — see [D-007](DECISIONS.md#d-007) note, [L-017](LEARNINGS.md#l-017).)*
+  `m_pt=1+√5≈3.236, m_ps=2` but we keep 4/2.5 — see [D-007](DECISIONS.md#d-007--breakeven-reference-385-not-50) note, [L-017](LEARNINGS.md#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs).)*
 - **Vertical barrier (horizon):** default `horizon_bars = 48` 15m bars (~12 h —
-  2–4 candles of the two-steps-higher 4h frame, [D-003](DECISIONS.md#d-003)). v1's `TargetExtractor3`
+  2–4 candles of the two-steps-higher 4h frame, [D-003](DECISIONS.md#d-003--vertical-barrier-horizon-length-and-no-touch-handling)). v1's `TargetExtractor3`
   used `n = 16 × 16 × 2 − 1 = 511` (~5.3 days); `511` is kept only as the
   v1-faithful reproduction value, not the default.
 - **Labels:** `+1` if the profit barrier is touched first, `−1` if the stop is
   touched first, `0` if neither is touched before the horizon expires
-- **Decision cadence:** one label per 15m bar close ([D-002](DECISIONS.md#d-002))
+- **Decision cadence:** one label per 15m bar close ([D-002](DECISIONS.md#d-002--decision-cadence-15m-bar-close))
 
-pATR is produced by `attach_patr` (B.0). The formula is locked to [D-012](DECISIONS.md#d-012) and the
-barrier pATR choice below is locked to [D-026](DECISIONS.md#d-026).
+pATR is produced by `attach_patr` (B.0). The formula is locked to [D-012](DECISIONS.md#d-012--patr-definition-lock) and the
+barrier pATR choice below is locked to [D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available).
 
 **pATR for barriers (D-026, revised 2026-06-09).** Both the profit target and the
 stop are anchored on the **15m pATR** (`patr_15`) by default — the friend's
@@ -133,7 +133,7 @@ explicit v2 recommendation ("use 15m for both; do not use 1h/4h for now") and th
 config seen in `latest_code_and_results` (`target_patr=15, stop_patr=15`; see
 L-017). `make_labels` still accepts `target_patr_col` and `stop_patr_col`
 separately so the **optional** multi-timeframe asymmetry (longer-horizon pATR for
-the target, shorter for the stop — the term-structure argument in [L-007](LEARNINGS.md#l-007)) remains
+the target, shorter for the stop — the term-structure argument in [L-007](LEARNINGS.md#l-007--multi-timeframe-atr-term-structure-why-longer-vol-for-target-shorter-vol-for-stop)) remains
 available as a *separate, off-by-default experiment*; it is just not the default.
 
 ### The one place we improve on v1: barrier-touch resolution (D-006)
@@ -155,7 +155,7 @@ Both arms produce a label per decision point. The pipeline records, per arm:
 
 1. the label series, and
 2. the **same-bar-ambiguity rate** — what fraction of touches required a
-   tie-break — logged at **both** the 15m and 1m grain ([D-006](DECISIONS.md#d-006) added detail).
+   tie-break — logged at **both** the 15m and 1m grain ([D-006](DECISIONS.md#d-006--barrier-touch-resolution-source) added detail).
    The 15m rate bounds how much the two arms can diverge; the 1m rate is
    the residual ambiguity inside a single 1m bar that straddles both
    barriers, and bounds the irreducible bias of the honest arm itself.
@@ -217,7 +217,7 @@ def make_labels(
 
 The default (`patr_15` for both barriers, `horizon_bars=48`) is the v2 honest
 default; passing `horizon_bars=511` reproduces v1's `TargetExtractor3` geometry.
-`rt3` is the three-class side label consumed downstream; if [D-014](DECISIONS.md#d-014)'s learned
+`rt3` is the three-class side label consumed downstream; if [D-014](DECISIONS.md#d-014--meta-labeling-side--size-decomposition)'s learned
 meta-labeling is ratified for this iteration it is trained as a *separate* stage
 on top of `rt3`, not produced inside `make_labels`.
 
@@ -226,13 +226,13 @@ on top of `rt3`, not produced inside `make_labels`.
 v1's `TargetExtractor3` ran with `consider_res=True`, which computes a per-bar
 `qualified` flag from trend-residual columns (`d_resi`, `g_resi`, `d_supi`) and
 carries it through label construction — an event-qualification step adjacent to
-the (rejected) CUSUM filter in [D-015](DECISIONS.md#d-015). v2 does **not** yet model this, so the
+the (rejected) CUSUM filter in [D-015](DECISIONS.md#d-015--labeling-event-filter-sampling-cadence). v2 does **not** yet model this, so the
 v1-faithful arm's label distribution may differ from v1's until it is resolved.
-**This is tracked as [D-040](DECISIONS.md#d-040) (open)**: before B.1 is locked, determine what the
+**This is tracked as [D-040](DECISIONS.md#d-040--v1s-qualified-event-filter-consider_res) (open)**: before B.1 is locked, determine what the
 `*_resi`/`*_supi` columns encode, whether `qualified` *filters* or only
 *annotates* labeled bars, and whether the v1-faithful arm must reproduce it.
-Until decided, the default behaviour is [D-002](DECISIONS.md#d-002)'s unqualified one-label-per-15m-close
-cadence. See D-040 and [L-017](LEARNINGS.md#l-017).
+Until decided, the default behaviour is [D-002](DECISIONS.md#d-002--decision-cadence-15m-bar-close)'s unqualified one-label-per-15m-close
+cadence. See D-040 and [L-017](LEARNINGS.md#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs).
 
 ### `LabelResult` schema (D-029)
 
@@ -257,7 +257,7 @@ returned in `LabelResult.attrs` (a dict stored alongside the DataFrame by the
 labeler), not as columns. The DataFrame is the primary artifact; the dict is
 read by B.2's `target_stats` helper.
 
-**Tail-row policy ([D-029](DECISIONS.md#d-029)).** Rows whose `t + horizon_bars` exceeds the end of
+**Tail-row policy ([D-029](DECISIONS.md#d-029--labelresult-schema-and-tail-sentinel-dtype)).** Rows whose `t + horizon_bars` exceeds the end of
 `df1m` carry `rt3 = null`, `first_touch_idx_1m = null`, and
 `is_complete = False`. They remain in the frame so the index stays aligned to
 the 15m clock; consumers filter on `is_complete` (or drop nulls in `rt3`) at
@@ -280,7 +280,7 @@ so no 1m bar that falls inside the entry 15m bar contributes to the label.
 ### 1m intra-bar tie-break (D-028)
 
 When a single 1m bar's high–low range contains *both* barriers, the order of
-first touch inside that 1m bar is unidentified from OHLC alone ([D-006](DECISIONS.md#d-006) added
+first touch inside that 1m bar is unidentified from OHLC alone ([D-006](DECISIONS.md#d-006--barrier-touch-resolution-source) added
 detail). The honest arm resolves it deterministically using the bar's net
 direction:
 
@@ -309,26 +309,26 @@ Python loop over decision points:
    filter `1m.open_time ∈ (15m.close_time[t], 15m.close_time[t] + horizon)`) to
    find the **first** 1m bar in each decision's horizon where any hit fires.
    The arg-min over 1m index is a `groupby(decision_t).first()` after sorting.
-4. Apply the [D-028](DECISIONS.md#d-028) tie-break only on rows flagged `ambig_1m`.
+4. Apply the [D-028](DECISIONS.md#d-028--1m-intra-bar-tie-break-honest-arm) tie-break only on rows flagged `ambig_1m`.
 
 The whole pipeline stays lazy until the final `.collect()` at the boundary,
 per the Polars convention in CLAUDE.md.
 
 ### Data-handling leakage probes (D-036, D-038)
 
-Two probes from the v1 audit ([L-008](LEARNINGS.md#l-008), [L-010](LEARNINGS.md#l-010)) land at this step rather than
+Two probes from the v1 audit ([L-008](LEARNINGS.md#l-008--v1s-default-gap-interpolation-is-non-causal-and-contaminates-labels), [L-010](LEARNINGS.md#l-010--v1s-patr-series-is-ffillbfilld-inside-targetextractor23)) land at this step rather than
 in feature engineering, because both affect the *label's* dependence on
-data beyond `t`. Each is a leakage probe per [D-001](DECISIONS.md#d-001) — honest arm primary,
+data beyond `t`. Each is a leakage probe per [D-001](DECISIONS.md#d-001--dual-arm-methodology-governing-rule) — honest arm primary,
 v1-faithful arm run *once* to measure inflation, then retired.
 
-**Gap-fill discipline ([D-036](DECISIONS.md#d-036)).** The 1m forward walk consumes `df1m` for
+**Gap-fill discipline ([D-036](DECISIONS.md#d-036--gap-fill-discipline-leakage-probe)).** The 1m forward walk consumes `df1m` for
 barrier resolution. If a 1m bar is missing inside a decision's horizon
 window:
 
 - *Honest arm* (`gap_fill="observed"`, default). The walk halts at the
   first missing 1m bar in its forward path. If no barrier was touched
   before the gap, the label emits typed null (`rt3 = null`,
-  `is_complete = False`, per [D-029](DECISIONS.md#d-029)). The conservative
+  `is_complete = False`, per [D-029](DECISIONS.md#d-029--labelresult-schema-and-tail-sentinel-dtype)). The conservative
   rule (any in-window gap → unresolvable) is the spec default; a refined
   rule that emits null only when the gap could have changed the outcome
   is a tracked follow-up for after B.2 quantifies how much sample the
@@ -346,7 +346,7 @@ window:
   participate in barrier resolution; resulting labels carry the
   future-bar contamination L-008 documents.
 
-**pATR fill policy ([D-038](DECISIONS.md#d-038)).** Barriers at `t` are sized from
+**pATR fill policy ([D-038](DECISIONS.md#d-038--patr-fill-policy-in-label-construction-leakage-probe)).** Barriers at `t` are sized from
 `target_patr_col[t]` and `stop_patr_col[t]`. When either is NaN at `t`
 (series start, gap-adjacent, indicator warm-up):
 
@@ -362,11 +362,11 @@ window:
   copy so the input `df15` is not mutated.
 
 Both arms share every other code path — the forward-walk vectorization,
-the entry-price convention ([D-027](DECISIONS.md#d-027)), the 1m intra-bar tie-break ([D-028](DECISIONS.md#d-028)),
+the entry-price convention ([D-027](DECISIONS.md#d-027--entry-price-convention-close-of-the-15m-bar-at-t)), the 1m intra-bar tie-break ([D-028](DECISIONS.md#d-028--1m-intra-bar-tie-break-honest-arm)),
 the `LabelResult` schema (D-029). The two probe parameters compose
-independently with `resolution` ([D-006](DECISIONS.md#d-006)), giving `3 × 2 × 2 = 12` arm
+independently with `resolution` ([D-006](DECISIONS.md#d-006--barrier-touch-resolution-source)), giving `3 × 2 × 2 = 12` arm
 configurations at the labeler (`gap_fill` now has three arms: observed /
-zoh_causal / v1_noncausal). The trial set in [D-008](DECISIONS.md#d-008)'s `V` accounting must
+zoh_causal / v1_noncausal). The trial set in [D-008](DECISIONS.md#d-008--success-threshold-pre-registration)'s `V` accounting must
 include these as distinct trials; B.4's pre-registration pins this.
 
 ### Leakage discipline
@@ -376,7 +376,7 @@ include these as distinct trials; B.4's pre-registration pins this.
   pATR. No bar that produced the label may also appear inside the feature window
   for the same sample (Phase D enforces the feature side; B.1 enforces the label
   side).
-- Tail rows with an incomplete horizon window are sentineled per [D-029](DECISIONS.md#d-029) — typed
+- Tail rows with an incomplete horizon window are sentineled per [D-029](DECISIONS.md#d-029--labelresult-schema-and-tail-sentinel-dtype) — typed
   `null` in `rt3`, `is_complete = False`, row retained for index
   alignment. Consumers filter on `is_complete` at the boundary; never
   partially labeled, never forward-filled. (v1's `fillna(33)` collapsed
@@ -395,18 +395,18 @@ unchanged — barrier-path tests are a separate concern.
   profit labels `−1`; neither labels `0`.
 - A path where both barriers fall in one 15m bar but the 1m sub-path clearly
   hits the stop first → honest arm `−1`, v1-faithful arm `+1`. This test *is* the
-  [D-006](DECISIONS.md#d-006) finding in miniature; assert the two arms disagree on exactly this case.
+  [D-006](DECISIONS.md#d-006--barrier-touch-resolution-source) finding in miniature; assert the two arms disagree on exactly this case.
 - A path where both barriers fall in **one 1m bar** (residual ambiguity).
   Construct two variants — `close > open` and `close < open` — and assert the
-  [D-028](DECISIONS.md#d-028) tie-break resolves each deterministically; assert `ambig_1m = True`.
+  [D-028](DECISIONS.md#d-028--1m-intra-bar-tie-break-honest-arm) tie-break resolves each deterministically; assert `ambig_1m = True`.
 - Horizon boundary: a touch on the last in-window bar counts; a touch one bar
   past the horizon yields `0`.
-- Entry-price convention ([D-027](DECISIONS.md#d-027)): a synthetic 15m bar whose close differs from
+- Entry-price convention ([D-027](DECISIONS.md#d-027--entry-price-convention-close-of-the-15m-bar-at-t)): a synthetic 15m bar whose close differs from
   its open by a known amount; assert `entry_price == close_15m_at_t` exactly and
   that barriers are anchored on that value, not the open or `next_open`.
 - Tail rows with an incomplete window carry `is_complete = False`, `rt3 = null`,
-  and the row remains in the frame ([D-029](DECISIONS.md#d-029)).
-- Gap-fill discipline ([D-036](DECISIONS.md#d-036)). A handcrafted path where:
+  and the row remains in the frame ([D-029](DECISIONS.md#d-029--labelresult-schema-and-tail-sentinel-dtype)).
+- Gap-fill discipline ([D-036](DECISIONS.md#d-036--gap-fill-discipline-leakage-probe)). A handcrafted path where:
   - *(a)* the honest arm resolves a barrier *before* an in-horizon gap →
     label is non-null and matches the resolution.
   - *(b)* the honest arm reaches an in-horizon gap before any barrier
@@ -417,9 +417,9 @@ unchanged — barrier-path tests are a separate concern.
 
   Assert (b) and (c) on the same input give different `LabelResult`
   rows — this is the D-036 probe in miniature.
-- pATR fill policy ([D-038](DECISIONS.md#d-038)). A path where `target_patr_col[t]` or
+- pATR fill policy ([D-038](DECISIONS.md#d-038--patr-fill-policy-in-label-construction-leakage-probe)). A path where `target_patr_col[t]` or
   `stop_patr_col[t]` is NaN at the decision bar (e.g., before Wilder
-  warm-up, or at the bar immediately after a gap that [L-001](LEARNINGS.md#l-001) documents).
+  warm-up, or at the bar immediately after a gap that [L-001](LEARNINGS.md#l-001--early-binance-1m-data-has-sub-minute-timestamp-offsets) documents).
   - Honest arm (`patr_fill="realised_only"`, default): row emits typed
     null.
   - v1-faithful arm (`patr_fill="v1_ffill_bfill"`): pATR is filled from
@@ -433,21 +433,21 @@ unchanged — barrier-path tests are a separate concern.
 
 - `make_labels(...)` produces both arms with identical interfaces
 - `rt3` (the three-class side label) is returned; `target2`/`stop2_slack` are
-  **not** implemented (discarded v1 experiment — [L-006](LEARNINGS.md#l-006) corrected, [D-014](DECISIONS.md#d-014), [L-017](LEARNINGS.md#l-017))
-- Barriers default to `patr_15` for both target and stop ([D-026](DECISIONS.md#d-026) revised), and
-  `horizon_bars` defaults to 48 ([D-003](DECISIONS.md#d-003)); `511` reproduces v1's geometry
+  **not** implemented (discarded v1 experiment — [L-006](LEARNINGS.md#l-006--v1s-target2true-is-embedded-meta-labeling--but-it-was-a-failed-experiment) corrected, [D-014](DECISIONS.md#d-014--meta-labeling-side--size-decomposition), [L-017](LEARNINGS.md#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs))
+- Barriers default to `patr_15` for both target and stop ([D-026](DECISIONS.md#d-026--patr-for-barriers-15m-for-both-target-and-stop-mtf-kept-available) revised), and
+  `horizon_bars` defaults to 48 ([D-003](DECISIONS.md#d-003--vertical-barrier-horizon-length-and-no-touch-handling)); `511` reproduces v1's geometry
 - `gap_fill` exposes three arms — `observed` (default), `zoh_causal`,
-  `v1_noncausal` ([D-036](DECISIONS.md#d-036))
+  `v1_noncausal` ([D-036](DECISIONS.md#d-036--gap-fill-discipline-leakage-probe))
 - All tests pass, including the deliberate honest-vs-v1 disagreement case
 - Same-bar ambiguity rate is computed and logged at both 15m and 1m grain
-- `LabelResult` schema ([D-029](DECISIONS.md#d-029)) is honored; tail rows sentineled but retained
-- Entry-price convention ([D-027](DECISIONS.md#d-027)) and 1m intra-bar tie-break ([D-028](DECISIONS.md#d-028)) are
+- `LabelResult` schema ([D-029](DECISIONS.md#d-029--labelresult-schema-and-tail-sentinel-dtype)) is honored; tail rows sentineled but retained
+- Entry-price convention ([D-027](DECISIONS.md#d-027--entry-price-convention-close-of-the-15m-bar-at-t)) and 1m intra-bar tie-break ([D-028](DECISIONS.md#d-028--1m-intra-bar-tie-break-honest-arm)) are
   implemented and exercised by tests
 - `gap_fill` and `patr_fill` arm parameters wired into `make_labels` with
   the honest defaults (`"observed"`, `"realised_only"`); the v1-faithful
-  values (`"v1_noncausal"`, `"v1_ffill_bfill"`) reproduce v1's [L-008](LEARNINGS.md#l-008) and
-  [L-010](LEARNINGS.md#l-010) behaviors and pass the dedicated D-036 / [D-038](DECISIONS.md#d-038) tests above
-- [D-002](DECISIONS.md#d-002), D-003, [D-006](DECISIONS.md#d-006), [D-012](DECISIONS.md#d-012), D-014, D-026, D-027, D-028, D-029, [D-033](DECISIONS.md#d-033),
+  values (`"v1_noncausal"`, `"v1_ffill_bfill"`) reproduce v1's [L-008](LEARNINGS.md#l-008--v1s-default-gap-interpolation-is-non-causal-and-contaminates-labels) and
+  [L-010](LEARNINGS.md#l-010--v1s-patr-series-is-ffillbfilld-inside-targetextractor23) behaviors and pass the dedicated D-036 / [D-038](DECISIONS.md#d-038--patr-fill-policy-in-label-construction-leakage-probe) tests above
+- [D-002](DECISIONS.md#d-002--decision-cadence-15m-bar-close), D-003, [D-006](DECISIONS.md#d-006--barrier-touch-resolution-source), [D-012](DECISIONS.md#d-012--patr-definition-lock), D-014, D-026, D-027, D-028, D-029, [D-033](DECISIONS.md#d-033--forward-walk-vectorization-strategy),
   D-036, D-038 entries reflected in DECISIONS.md (D-033 governs the
   Polars forward-walk strategy; D-036 and D-038 are the data-handling
   leakage probes from the v1 audit)
@@ -465,14 +465,14 @@ plus a small `target_stats(labels, ...) -> dict` helper.
   positive; confirm and record the full three-class split.
 - **Timeout (no-touch) rate:** the fraction labeled `0` because the horizon
   expired. v1 never logged this; it is essential for understanding the base rate
-  and for the no-touch decision ([D-003](DECISIONS.md#d-003)).
+  and for the no-touch decision ([D-003](DECISIONS.md#d-003--vertical-barrier-horizon-length-and-no-touch-handling)).
 - **Distribution over time:** class fractions per calendar quarter. Crypto's
   regimes (2017/2021 bull, 2018/2022 bear, 2023–2025 recovery and 2025 pullback)
   will move the positive rate substantially. Plot it.
 - **Label run-length / overlap:** the median forward distance to first touch.
   This is the practical measure of how much adjacent labels overlap, and it sets
-  expectations for the effective sample size (B.3) and the embargo ([D-004](DECISIONS.md#d-004)).
-- **Breakeven reference ([D-007](DECISIONS.md#d-007)):** write down, in the notebook and in
+  expectations for the effective sample size (B.3) and the embargo ([D-004](DECISIONS.md#d-004--embargo-and-purging)).
+- **Breakeven reference ([D-007](DECISIONS.md#d-007--breakeven-reference-385-not-50)):** write down, in the notebook and in
   DECISIONS.md, that the pre-cost breakeven hit rate is
   `2.5 / (4 + 2.5) = 38.5%`. Every precision number from here on is judged
   against this, not against 50%.
@@ -496,7 +496,7 @@ measurement.
 - **Primary (honest) arm:** multi-fold walk-forward, expanding and anchored
   (train always starts at the beginning of the common span); each successive
   fold extends train and slides val/test forward.
-- **Concrete sizing ([D-010](DECISIONS.md#d-010) added detail):**
+- **Concrete sizing ([D-010](DECISIONS.md#d-010--walk-forward-geometry) added detail):**
 
   | param                | value                          | rationale                                            |
   |----------------------|--------------------------------|------------------------------------------------------|
@@ -522,7 +522,7 @@ split is a single comparison point, not a co-equal default. See D-010.
 
 ### Purging and embargo (D-004)
 
-The label horizon defaults to 48 bars (511 in the v1-faithful arm, [D-003](DECISIONS.md#d-003)). A
+The label horizon defaults to 48 bars (511 in the v1-faithful arm, [D-003](DECISIONS.md#d-003--vertical-barrier-horizon-length-and-no-touch-handling)). A
 training label whose forward window reaches into a test fold leaks the test
 period's outcome into training. v1 only overlapped the *feature* window backward
 (~20 steps) and never embargoed the *label* horizon — so this leak was unguarded.
@@ -553,7 +553,7 @@ the width of any confidence interval.
   - **Scope:** concurrency and uniqueness are computed on **training-fold
     labels only** (label windows confined to the fold). Computing across the
     full series leaks test-period overlap structure into training weights.
-- **No time decay ([D-017](DECISIONS.md#d-017)).** The piecewise-linear time-decay factor on
+- **No time decay ([D-017](DECISIONS.md#d-017--time-decay-on-sample-weights)).** The piecewise-linear time-decay factor on
   cumulative uniqueness (LdP ch. 4) is disabled (`c = 1`). Walk-forward
   retraining already adapts to regime drift; further decay would shrink an
   already-small `N_eff` for marginal gain.
@@ -626,13 +626,13 @@ def average_uniqueness(label_spans: np.ndarray) -> np.ndarray:
 - Purge + embargo tested and correct; default embargo = horizon
 - Uniqueness weights and `N_eff` (Kish) computed on **training-fold labels
   only**, with `weight = class × uniqueness` renormalized per fold to sum
-  to `N` (asserted in a test); no time decay ([D-017](DECISIONS.md#d-017))
+  to `N` (asserted in a test); no time decay ([D-017](DECISIONS.md#d-017--time-decay-on-sample-weights))
 - `walkforward` and `v1_single` schemes produced from one function; the
-  `cpcv` scheme value is reserved in the signature for Phase C ([D-016](DECISIONS.md#d-016))
+  `cpcv` scheme value is reserved in the signature for Phase C ([D-016](DECISIONS.md#d-016--backtest-geometry-walk-forward-vs-cpcv))
 - Concrete fold geometry (n_folds=8, anchor≈2y, test≈1Q, val≈6w) wired into
   defaults; the trial set (folds × dual arms × baselines) is the V source
-  for [D-008](DECISIONS.md#d-008)
-- [D-004](DECISIONS.md#d-004), [D-005](DECISIONS.md#d-005), [D-010](DECISIONS.md#d-010), D-017, [D-032](DECISIONS.md#d-032) reflected in DECISIONS.md; D-016 status
+  for [D-008](DECISIONS.md#d-008--success-threshold-pre-registration)
+- [D-004](DECISIONS.md#d-004--embargo-and-purging), [D-005](DECISIONS.md#d-005--sample-uniqueness-weighting), [D-010](DECISIONS.md#d-010--walk-forward-geometry), D-017, [D-032](DECISIONS.md#d-032--label_spans-representation) reflected in DECISIONS.md; D-016 status
   updated to reflect the reserved scheme value
 
 ---
@@ -644,11 +644,11 @@ def average_uniqueness(label_spans: np.ndarray) -> np.ndarray:
 v1 had no success condition, so "success" was whatever the numbers happened to
 be. Fix that here, before any model exists, so Phase E cannot retrofit the bar.
 
-Concrete pre-registered condition ([D-008](DECISIONS.md#d-008) added detail, this phase):
+Concrete pre-registered condition ([D-008](DECISIONS.md#d-008--success-threshold-pre-registration) added detail, this phase):
 
 > The hypothesis is confirmed if the honest arm achieves **out-of-sample,
 > net-of-cost precision-at-threshold above the cost-adjusted breakeven**
-> ([D-007](DECISIONS.md#d-007) added detail; not the bare 38.5%, which is pre-cost) with an
+> ([D-007](DECISIONS.md#d-007--breakeven-reference-385-not-50) added detail; not the bare 38.5%, which is pre-cost) with an
 > `N_eff`-based confidence interval excluding that bar, on **at least 5 of
 > the 8 walk-forward test folds**, with **Deflated Sharpe Ratio > 0.95**
 > on the aggregated out-of-sample equity curve and **PBO < 0.2**.
@@ -673,15 +673,15 @@ output exists. They are now fixed.
 
 ### Checkpoint
 
-- DECISIONS.md updated with [D-002](DECISIONS.md#d-002) … [D-033](DECISIONS.md#d-033) (those not already written in B.0–B.3),
-  including the new entries for entry price ([D-027](DECISIONS.md#d-027)), intra-bar tie-break ([D-028](DECISIONS.md#d-028)),
-  `LabelResult` schema ([D-029](DECISIONS.md#d-029)), module layout ([D-030](DECISIONS.md#d-030)), pATR module location
-  ([D-031](DECISIONS.md#d-031)), and forward-walk vectorization (D-033); status updates on [D-008](DECISIONS.md#d-008)
-  (pinned values, expanded V trial-set), [D-010](DECISIONS.md#d-010) (concrete sizing), [D-015](DECISIONS.md#d-015) (out of
-  scope for this iteration), and [D-016](DECISIONS.md#d-016) (scheme value reserved). The
-  data-handling probes [D-036](DECISIONS.md#d-036) (gap-fill discipline) and [D-038](DECISIONS.md#d-038) (pATR fill policy
+- DECISIONS.md updated with [D-002](DECISIONS.md#d-002--decision-cadence-15m-bar-close) … [D-033](DECISIONS.md#d-033--forward-walk-vectorization-strategy) (those not already written in B.0–B.3),
+  including the new entries for entry price ([D-027](DECISIONS.md#d-027--entry-price-convention-close-of-the-15m-bar-at-t)), intra-bar tie-break ([D-028](DECISIONS.md#d-028--1m-intra-bar-tie-break-honest-arm)),
+  `LabelResult` schema ([D-029](DECISIONS.md#d-029--labelresult-schema-and-tail-sentinel-dtype)), module layout ([D-030](DECISIONS.md#d-030--phase-b-module-layout)), pATR module location
+  ([D-031](DECISIONS.md#d-031--patr-module-location)), and forward-walk vectorization (D-033); status updates on [D-008](DECISIONS.md#d-008--success-threshold-pre-registration)
+  (pinned values, expanded V trial-set), [D-010](DECISIONS.md#d-010--walk-forward-geometry) (concrete sizing), [D-015](DECISIONS.md#d-015--labeling-event-filter-sampling-cadence) (out of
+  scope for this iteration), and [D-016](DECISIONS.md#d-016--backtest-geometry-walk-forward-vs-cpcv) (scheme value reserved). The
+  data-handling probes [D-036](DECISIONS.md#d-036--gap-fill-discipline-leakage-probe) (gap-fill discipline) and [D-038](DECISIONS.md#d-038--patr-fill-policy-in-label-construction-leakage-probe) (pATR fill policy
   in labeler) are wired into `make_labels` at this phase per the v1 audit
-  ([L-008](LEARNINGS.md#l-008), [L-010](LEARNINGS.md#l-010)); [D-037](DECISIONS.md#d-037) and [D-039](DECISIONS.md#d-039) are Phase D concerns and remain Proposed-but-
+  ([L-008](LEARNINGS.md#l-008--v1s-default-gap-interpolation-is-non-causal-and-contaminates-labels), [L-010](LEARNINGS.md#l-010--v1s-patr-series-is-ffillbfilld-inside-targetextractor23)); [D-037](DECISIONS.md#d-037--feature-frame-nan-policy-leakage-probe) and [D-039](DECISIONS.md#d-039--cross-timeframe-alignment-method-leakage-probe) are Phase D concerns and remain Proposed-but-
   not-yet-implemented at the B checkpoint
 - LEARNINGS.md updated with the target diagnostics, the same-bar ambiguity rate
   at both grains, the Q4 `shift(3)` verdict from B.0, and the embargo
@@ -702,20 +702,20 @@ output exists. They are now fixed.
 - No scalers fit (Phase D, per-fold only)
 - No model, no training, no thresholds tuned against test (Phase C/E)
 - No feature selection (Phase D)
-- **No CUSUM event filter ([D-015](DECISIONS.md#d-015)).** Out of scope for this iteration; honest-arm
-  cadence stays at every 15m close ([D-002](DECISIONS.md#d-002)). Revisit in a follow-on iteration if the
+- **No CUSUM event filter ([D-015](DECISIONS.md#d-015--labeling-event-filter-sampling-cadence)).** Out of scope for this iteration; honest-arm
+  cadence stays at every 15m close ([D-002](DECISIONS.md#d-002--decision-cadence-15m-bar-close)). Revisit in a follow-on iteration if the
   base-rate / overlap diagnostics in B.2 motivate it.
-- **No CPCV implementation in Phase B ([D-016](DECISIONS.md#d-016)).** The `cpcv` scheme value is
+- **No CPCV implementation in Phase B ([D-016](DECISIONS.md#d-016--backtest-geometry-walk-forward-vs-cpcv)).** The `cpcv` scheme value is
   reserved in `make_walkforward_folds` so Phase C consumers don't reshape the
   API, but the implementation lands in Phase C.
-- **No feature-side data-handling probes ([D-037](DECISIONS.md#d-037), [D-039](DECISIONS.md#d-039)).** Phase B wires
-  [D-036](DECISIONS.md#d-036) and [D-038](DECISIONS.md#d-038) at the labeling step because both directly affect the
+- **No feature-side data-handling probes ([D-037](DECISIONS.md#d-037--feature-frame-nan-policy-leakage-probe), [D-039](DECISIONS.md#d-039--cross-timeframe-alignment-method-leakage-probe)).** Phase B wires
+  [D-036](DECISIONS.md#d-036--gap-fill-discipline-leakage-probe) and [D-038](DECISIONS.md#d-038--patr-fill-policy-in-label-construction-leakage-probe) at the labeling step because both directly affect the
   label's dependence on data beyond `t`. The *feature-side* of D-036 (the
   same interpolated 1m / 15m / 1h / 4h series feeding indicators), plus
   D-037 (`DataMixer`'s blanket `bfill`) and D-039 (cross-TF mixing method),
   are Phase D's responsibility and land in feature assembly. Phase B does
   not preemptively define their arm parameters or assemble multi-TF
-  features; that boundary is the same one [D-010](DECISIONS.md#d-010)'s purge / embargo
+  features; that boundary is the same one [D-010](DECISIONS.md#d-010--walk-forward-geometry)'s purge / embargo
   enforces in the temporal direction.
 
 If you find yourself wanting any of these to "see if the target works," stop:
