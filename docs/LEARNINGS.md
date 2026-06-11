@@ -846,3 +846,93 @@ PHASE_B "~2.3 B lookups, unacceptably slow" warning only applies at the 511-bar
 v1-faithful horizon (~16× the window); the fully-vectorized join-asof form stays a
 *conditional* optimization for that arm, not a prerequisite for the honest
 default.
+
+---
+
+## L-021 — The pinned walk-forward geometry cannot cover 8.75 years with 8 quarter folds — end-anchored chosen
+
+**Discovered:** B.3 — wiring D-010's pinned defaults into `make_walkforward_folds`
+and running them on the real 15m index (307,205 bars, 2017-08-17 → 2026-06-07).
+
+D-010 pinned three constraints that turn out to be mutually unsatisfiable on the
+real span: `n_folds = 8`, `slide_step = test_fold_bars` (non-overlapping quarter
+folds), **and** "each major regime lands in at least one test fold" with "headroom
+rolls into the expanding-train tail." Eight non-overlapping quarter folds span only
+**~2 years** — they cannot tile 8.75 years of regimes.
+
+The first literal implementation (anchor expanding from the start, folds tiling
+*forward* right after the 2-year anchor) tested only **2019Q4–2021Q3** and left the
+most recent **4.68 years (2021Q4–2026) in no fold at all** — neither train nor
+test. So the "headroom rolls into the expanding-train tail" phrase was not even
+achieved: the tail rolled into nothing.
+
+**Resolution (user, 2026-06-11): end-anchored placement.** The last test block ends
+at the data end; folds tile *backward* by one test block. Result on real data:
+
+- **Test** = the most recent ~2 years, **2024Q2–2026Q2** (folds 0–7,
+  2024-06-07 → 2026-06-07), contiguous and non-overlapping.
+- **Train** expands from 2017 up to each fold's val start — fold 0 already trains
+  on ~234k bars (~6.7 y); every pre-2024 bar feeds training. This is what "headroom
+  rolls into the expanding-train tail" should have meant.
+- `anchor_train_bars` is reinterpreted as the **minimum** initial train (a floor),
+  not the fold-0 train size.
+
+**The trade-off, stated honestly:** end-anchored tests only 2024–26 in-fold (a bull
+leg + the 2025 pullback); the 2018/2022 bears and 2021 bull are *training* regimes,
+never scored out-of-sample. The rejected alternatives were worse: packed-from-start
+tested no recent regime and wasted 4.7 y; spreading folds across the span to hit
+every regime would break `slide = test_fold_bars` and interleave train/test in a
+way that complicates the expanding-anchored story. End-anchored matches how the
+model would actually be deployed — train on all history, score the most recent
+window — which is the defensible choice for the headline walk-forward. Recorded in
+D-010 (added detail). If pre-2024 OOS regime coverage is later wanted, the natural
+home is CPCV ([D-016](DECISIONS.md#d-016--backtest-geometry-walk-forward-vs-cpcv)),
+whose combinatorial paths *do* sample every block — another reason CPCV remains the
+secondary `V` source.
+
+---
+
+## L-022 — Kish on the sample weights does not measure label overlap — use the uniqueness-sum for CIs
+
+**Discovered:** B.3 — computing weights on fold 0's training labels (231,785
+complete rows, horizon 48) and comparing the two effective-sample-size notions.
+
+[D-005](DECISIONS.md#d-005--sample-uniqueness-weighting) (added detail, original
+draft) specified the confidence-interval effective sample size as **Kish**
+`N_eff = (Σw)² / Σw²` on the `class × uniqueness` weights, *and* expected it
+"one-to-two orders of magnitude below the raw row count." Implementing both
+exposed that those two statements contradict each other.
+
+**The numbers (fold 0):**
+
+| quantity | value | what it measures |
+|---|---:|---|
+| raw complete rows `N` | 231,785 | — |
+| mean average-uniqueness `ū` | 0.021 | ≈ 1/48: every label overlaps ~48 neighbours |
+| **Kish `(Σw)²/Σw²`** | **211,712** (0.91·N) | weight *dispersion* |
+| **uniqueness-sum `Σ ū_i`** | **≈ 4,900** (0.021·N) | effectively-independent *labels* |
+
+**Why Kish fails here.** Kish answers "how uneven is this weight vector?" For a
+*weighted mean* of **independent** samples its inverse is the variance inflation.
+But the uniqueness factor is near-**uniform** (~0.021 everywhere, because overlap
+is roughly constant), so it adds almost no dispersion and Kish ≈ `N`. The shrink it
+*does* show (0.91) comes entirely from the bimodal class weights, not from overlap.
+Overlapping labels are **correlated**, and a weighted-mean Kish on uniform weights
+cannot see correlation — it would report a CI as if all 231,785 labels were
+independent. That is precisely the over-confidence VISION's "label-overlap-aware
+confidence intervals" exists to prevent.
+
+**The fix (decision, 2026-06-11).** The overlap-aware effective count is LdP's
+**uniqueness-sum** `N_eff = Σ ū_i` — the number of effectively-independent labels —
+which lands at ~4,900, i.e. the "one-to-two orders of magnitude below `N`" the
+expectation actually described. So:
+
+- **CIs use `Σ ū_i`** (`splits.weights.effective_n_uniqueness`), evaluated on the
+  metric's own label set (test-fold labels for a test-metric CI).
+- **Kish** (`n_eff_kish`) is kept only as a training-weight *dispersion diagnostic*
+  — never the CI denominator.
+
+D-005 corrected with this distinction. **Methodological lesson:** "effective sample
+size" is not one quantity — weight dispersion (Kish) and overlap-driven independence
+(uniqueness-sum) are different, and only the latter belongs under a `√N_eff` in an
+overlap-aware interval. The smaller, scarier number is the honest one.

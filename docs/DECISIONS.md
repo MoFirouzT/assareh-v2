@@ -186,14 +186,26 @@ first line of the decision body, not in the status field.
   `c_t = Σ_i 1[t_{i,0} ≤ t ≤ t_{i,1}]`. Average uniqueness
   `ū_i = (1/|window_i|) · Σ_{t∈window_i} (1/c_t)` — sanity test: `ū_i = 1` when
   all `c_t = 1`; note `|window_i|` is the bar count, **not** a concurrency value.
-  Effective sample size via Kish: `N_eff = (Σ w_i)² / Σ w_i²`, used as the
-  denominator in every interval (`SE ≈ σ/√N_eff`); expect `N_eff` one-to-two
-  orders of magnitude below the raw row count given 511-bar overlap. After
-  `class × uniqueness`, **renormalize** weights to sum to `N` (or `N_eff`) so the
+  After `class × uniqueness`, **renormalize** weights to sum to `N` so the
   effective learning rate is unchanged — assert in a test. Concurrency and
   uniqueness must be computed on **training-fold labels only** (windows inside
   the fold); computing across the full series leaks test-period overlap structure
   into training weights.
+- **Added detail — CI denominator is the uniqueness-sum, not Kish (corrected
+  2026-06-11, B.3; [L-022](LEARNINGS.md#l-022--kish-on-the-sample-weights-does-not-measure-label-overlap--use-the-uniqueness-sum-for-cis)).**
+  An earlier draft of this entry specified the confidence-interval effective
+  sample size as Kish `N_eff = (Σw)²/Σw²` on the `class × uniqueness` weights, and
+  expected it "one-to-two orders of magnitude below the raw row count." Those two
+  statements are inconsistent: Kish measures weight *dispersion*, not label
+  *overlap*, so on near-uniform uniqueness it stays ≈ `N` (fold-0 smoke: 211,712
+  of 231,785) and would yield **over-confident** CIs — the opposite of the
+  overlap-aware interval VISION requires. The overlap-aware effective count is the
+  **LdP uniqueness-sum** `N_eff = Σ ū_i` (fold-0 smoke: ≈ 4,900 — the one-to-two
+  orders the expectation actually described). So: **CIs use `Σ ū_i`**
+  (`effective_n_uniqueness`); Kish `(Σw)²/Σw²` (`n_eff_kish`) is retained only as a
+  training-weight dispersion *diagnostic*, never as the CI denominator. Both are
+  computed on the relevant label set (training-fold labels for weights; the
+  metric's own label set for a test-metric CI).
 
 ## D-006 — Barrier-touch resolution source
 
@@ -350,11 +362,26 @@ first line of the decision body, not in the status field.
   | `slide_step_bars`     | = `test_fold_bars`               |
   | `embargo_bars`        | 511 each side (D-004)            |
 
-  Total span consumed ≈ 2y anchor + 8 × (val + test) + embargos ≈ 6 years on
-  the ~8.75-year common span; ~2.75 y headroom rolls into the expanding-train
-  tail. Each major regime (2017/2021 bull, 2018/2022 bear, 2023–25 recovery,
-  2025 pullback) lands in at least one test fold. These sizes flow into
-  [D-008](#d-008--success-threshold-pre-registration)'s K-of-N (K = 5, N = 8).
+  Total span consumed ≈ 2y anchor + 8 × (val + test) + embargos. These sizes
+  flow into [D-008](#d-008--success-threshold-pre-registration)'s K-of-N (K = 5, N = 8).
+- **Added detail — end-anchored placement (resolved 2026-06-11, B.3).** An earlier
+  draft of this entry assumed the 8 contiguous quarter folds would "cover every
+  major regime" with "~2.75 y headroom rolling into the expanding-train tail." On
+  the real 8.75-year span that is infeasible: 8 non-overlapping quarter folds span
+  only ~2 years, so the two goals (cover all regimes *and* keep `slide =
+  test_fold_bars`, `n_folds = 8`) are mutually unsatisfiable
+  ([L-021](LEARNINGS.md#l-021--the-pinned-walk-forward-geometry-cannot-cover-875-years-with-8-quarter-folds--end-anchored-chosen)).
+  Resolved (user, 2026-06-11): the folds are **end-anchored** — the last test
+  block ends at the data end and the folds tile *backward* by one test block, so
+  the most recent ~2 years (2024Q2–2026Q2) are the out-of-sample test region and
+  every earlier bar rolls into the expanding training tail. `anchor_train_bars`
+  becomes the *minimum* initial train required before the oldest fold (a floor,
+  not the fold-0 train size). This matches deployment reality (train on the past,
+  score the recent) at the cost of not testing pre-2024 regimes in-fold; the
+  trade-off is recorded in L-021. The packed-from-start and spread-across-span
+  alternatives were rejected (the former tests no recent regime and wastes ~4.7 y;
+  the latter breaks `slide = test_fold_bars`). Implemented in
+  `splits/splits.py` `make_walkforward_folds`.
 
 ## D-011 — Cost model
 
@@ -574,6 +601,9 @@ first line of the decision body, not in the status field.
   compute-gated. D-008's pinned values (see its added detail) take
   trial-set estimation as the **primary** `V` source; reduced CPCV is the
   **secondary** option, run only if the trial-set estimator is too narrow.
+  **Reservation in place (B.3, 2026-06-11):** `make_walkforward_folds` accepts
+  `scheme="cpcv"` and raises `NotImplementedError` — the value is reserved so
+  Phase C consumers need not reshape the API; the implementation stays Phase C.
 
 ## D-017 — Time-decay on sample weights
 
