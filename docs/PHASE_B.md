@@ -225,18 +225,25 @@ default; passing `horizon_bars=511` reproduces v1's `TargetExtractor3` geometry.
 meta-labeling is ratified for this iteration it is trained as a *separate* stage
 on top of `rt3`, not produced inside `make_labels`.
 
-### v1's qualified-event filter (D-040, open)
+### v1's qualified-event filter (D-040, resolved)
 
 v1's `TargetExtractor3` ran with `consider_res=True`, which computes a per-bar
-`qualified` flag from trend-residual columns (`d_resi`, `g_resi`, `d_supi`) and
-carries it through label construction — an event-qualification step adjacent to
-the (rejected) CUSUM filter in [D-015](DECISIONS.md#d-015--labeling-event-filter-sampling-cadence). v2 does **not** yet model this, so the
-v1-faithful arm's label distribution may differ from v1's until it is resolved.
-**This is tracked as [D-040](DECISIONS.md#d-040--v1s-qualified-event-filter-consider_res) (open)**: before B.1 is locked, determine what the
-`*_resi`/`*_supi` columns encode, whether `qualified` *filters* or only
-*annotates* labeled bars, and whether the v1-faithful arm must reproduce it.
-Until decided, the default behaviour is [D-002](DECISIONS.md#d-002--decision-cadence-15m-bar-close)'s unqualified one-label-per-15m-close
-cadence. See D-040 and [L-017](LEARNINGS.md#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs).
+`qualified` flag from trend-residual breakout columns (`d_resi`, `g_resi`,
+`d_supi`) — an event-qualification step adjacent to the (rejected) CUSUM filter in
+[D-015](DECISIONS.md#d-015--labeling-event-filter-sampling-cadence). Resolved by
+reading the v1 source ([D-040](DECISIONS.md#d-040--v1s-qualified-event-filter-consider_res),
+Accepted): `consider_res and not qualified` flips only `target3` (the discarded
+meta-label v2 does not produce, [D-014](DECISIONS.md#d-014--meta-labeling-side--size-decomposition)),
+**never `rt3`** — so `make_labels` is unaffected and B.1 keeps
+[D-002](DECISIONS.md#d-002--decision-cadence-15m-bar-close)'s unqualified
+one-label-per-15m-close cadence. The honest arm does not filter on `qualified`.
+The genuine mechanism is downstream: v1's production trainer filters the *sample
+set* to `qualified == 1` (~25% retention in the trend-residual-filter runs). The
+v1-faithful arm reproduces that sample-filter in Phase D/E — where the breakout
+indicators and sampler live — tracked as
+[D-041](DECISIONS.md#d-041--v1-faithful-qualified-sample-filter-trend-residual-gate);
+it is **not** a B.1 concern. See D-040, D-041, and
+[L-017](LEARNINGS.md#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs).
 
 ### `LabelResult` schema (D-029)
 

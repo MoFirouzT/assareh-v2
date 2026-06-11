@@ -114,11 +114,15 @@ evaluation-harness skeleton *before* writing any model.
   Learned meta-labeling is a *new* v2 idea (D-014): whether a separate meta-model
   is trained on top of `rt3` in Phase E is **D-014's open question, ratified
   before Phase E begins**
-- **Resolve v1's qualified-event filter (D-040, open).** v1 ran `consider_res=True`
-  (a `qualified` flag from trend-residual columns gating labeling events). Decide
-  before B.1 is locked whether the v1-faithful arm reproduces it and whether the
-  honest arm carries a `qualified` column; until then the default is [D-002](DECISIONS.md#d-002--decision-cadence-15m-bar-close)'s
-  unqualified per-15m-close cadence (L-017, D-040)
+- **v1's qualified-event filter resolved ([D-040](DECISIONS.md#d-040--v1s-qualified-event-filter-consider_res), Accepted).** v1 ran
+  `consider_res=True`, but the source read shows `qualified` flips only `target3`
+  (the discarded meta-label v2 does not produce) and never `rt3` — so **B.1's
+  labeler is unaffected** and the honest arm keeps [D-002](DECISIONS.md#d-002--decision-cadence-15m-bar-close)'s unqualified
+  per-15m-close cadence. The genuine part — v1's downstream `qualified == 1`
+  *sample-filter* (~25% retention in the TRF runs) — is split out to
+  [D-041](DECISIONS.md#d-041--v1-faithful-qualified-sample-filter-trend-residual-gate)
+  (the v1-faithful arm reproduces it in Phase D/E, where the trend-residual
+  indicators and sampler live); not a Phase B concern (L-017, D-040, D-041)
 - `LabelResult` as a single Polars DataFrame on the 15m decision clock with
   typed-null tail sentinels (D-029); per-arm same-bar ambiguity rates logged
   at both 15m and 1m grain

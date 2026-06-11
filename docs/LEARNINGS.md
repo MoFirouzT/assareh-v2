@@ -679,6 +679,12 @@ event-qualification step distinct from [D-015](DECISIONS.md#d-015--labeling-even
 user's instruction this is now represented in the plan as **[D-040](DECISIONS.md#d-040--v1s-qualified-event-filter-consider_res)** (PHASE_B B.1
 and PLAN Phase B).
 
+> **Refined by [L-019](#l-019--v1s-qualified-is-a-downstream-sample-filter-not-a-labeler-gate--v1s-reported-numbers-cover-only-the-qualified-subset) (2026-06-11):** the source read shows `qualified` does **not**
+> gate `rt3` inside the labeler (it flips only the dropped `target3` meta-label);
+> the real gate is a *downstream* `qualified == 1` sample-filter in v1's data
+> loader. D-040 resolved Accepted (labeler unaffected); the filter is carried to
+> [D-041](DECISIONS.md#d-041--v1-faithful-qualified-sample-filter-trend-residual-gate) (Phase D/E).
+
 ---
 
 ## L-011 addendum (2026-06-09) — friend's cross-timeframe alignment caution
@@ -727,3 +733,59 @@ only at/after its close).
 - *v1-faithful arm* (`higher_tf_lag="v1_faithful"`) — reproduce `shift(k−1)` +
   ffill + bfill, carrying the 15-min leak.
 - **The gap is exactly one 15m step** — the cleanest leakage finding in B.0.
+
+---
+
+## L-019 — v1's `qualified` is a *downstream sample-filter*, not a labeler gate — v1's reported numbers cover only the qualified subset
+
+**Discovered:** 2026-06-11 — resolving [D-040](DECISIONS.md#d-040--v1s-qualified-event-filter-consider_res)
+by reading the v1 source (`Assareh/latest_code_and_result/`), prompted by the
+B.1 readiness check.
+
+[L-017](#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs)
+flagged that v1 ran `consider_res=True` and recorded it as D-040 with the worry
+that it might change the v1-faithful arm's **label distribution**. Reading the
+code shows the mechanism is split across two stages, and the worry was aimed at
+the wrong one:
+
+- **Inside the labeler — annotates only.** `qualified = int(above_d_res or
+  above_g_res or above_d_sup)` (an OR of three support/resistance *breakout*
+  flags from `Indicators/trend_ta.py:1369,1402-1404`). In
+  `TargetExtractor3.reversal_detector`, `consider_res and not qualified` flips
+  only the **first** return value `target3` (the meta-label) `1→0`; the **second**
+  value `rt3` (the side label) is identical with or without the gate
+  (`btc_feature_engineering_utils.py:1123-1141`). Since v2 reproduces only `rt3`
+  and drops `target3` ([D-014](DECISIONS.md#d-014--meta-labeling-side--size-decomposition),
+  [L-006](#l-006--v1s-target2true-is-embedded-meta-labeling--but-it-was-a-failed-experiment)),
+  **`qualified` changes no v2 label.**
+- **Downstream — filters the sample set.** The genuine effect is in the data
+  loader: the production trainer (`ModelingUtils/trainers.py:119-121`) calls
+  `get_qualified_reframed_train/test/val_data()`, which keep only `qualified == 1`
+  rows (`...if self.y2_*.iloc[i, qualified_idx] == 1`,
+  `btc_feature_engineering_utils.py:2568`).
+
+**The surprise.** v1's headline numbers from the trend-residual-filter (TRF)
+runs were trained **and scored** on a ~**25.4%** subset of bars (the
+notebook-printed "number of qualified cases"; the NoTRF arm prints ~100%, i.e. a
+no-op). So v1's reported precision describes performance *conditional on a
+support/resistance breakout having just occurred* — a far easier, self-selected
+population than "every 15m close." Any v1-vs-v2 comparison that ignores this is
+not apples-to-apples.
+
+**Why it matters / how applied.**
+
+- **B.1 unaffected.** Because `rt3` is untouched, the labeler needs no change and
+  B.1 was unblocked (D-040, Accepted).
+- **Honest arm never filters** — it keeps [D-002](DECISIONS.md#d-002--decision-cadence-15m-bar-close)'s
+  every-15m-close cadence, consistent with rejecting the analogous event filter
+  in [D-015](DECISIONS.md#d-015--labeling-event-filter-sampling-cadence). Conditioning
+  on a breakout would be exactly the selection effect the honest arm exists to
+  avoid.
+- **v1-faithful arm reproduces the filter downstream** — the breakout indicators
+  are Phase D feature work and the row-filter is a Phase E sampler concern, so it
+  is carved out as [D-041](DECISIONS.md#d-041--v1-faithful-qualified-sample-filter-trend-residual-gate)
+  and run as a selection probe (retention rate logged) when those stages exist.
+- **Methodological echo of L-017:** "class defaults ≠ what was run" extends to
+  "what was *labeled* ≠ what was *trained on*." The label frame carries every bar;
+  the population that produced v1's metrics was decided one layer down, in the
+  loader. Pin the comparison to the trained-on population, not the label table.

@@ -46,7 +46,8 @@ first line of the decision body, not in the status field.
 | D-037 | Feature-frame NaN policy (leakage probe)                              | D     | Accepted |
 | D-038 | pATR fill policy in label construction (leakage probe)                | B     | Accepted |
 | D-039 | Cross-timeframe alignment method (leakage probe)                      | D     | Accepted |
-| D-040 | v1's qualified-event filter (`consider_res`)                          | B     | Open     |
+| D-040 | v1's qualified-event filter (`consider_res`)                          | B     | Accepted |
+| D-041 | v1-faithful qualified sample-filter (trend-residual gate)             | D→E   | Accepted |
 
 ---
 
@@ -1058,35 +1059,86 @@ first line of the decision body, not in the status field.
 
 ## D-040 — v1's qualified-event filter (`consider_res`)
 
-- **Phase:** B — **Status:** Open (to decide; recorded so
-  it isn't lost — per user instruction to represent it in the plan)
-- **Context.** v1's `TargetExtractor3` was run with `consider_res=True` in
-  `latest_code_and_results`. This sets a per-bar `qualified` flag derived from
-  trend-residual columns (`d_resi`, `g_resi`, `d_supi`) — i.e. only bars meeting
-  a trend-residual condition are treated as genuine labeling events; the flag is
-  computed inside the labeler and carried alongside the label
+- **Phase:** B — **Status:** Accepted (resolved 2026-06-11; B.1-unblocking)
+- **Context.** v1's `TargetExtractor3` was run with `target2=True, consider_res=True`
+  in every `latest_code_and_result` notebook (E1–E6, `0_Preprocessing`). This sets a
+  per-bar `qualified` flag, `qualified = int(above_d_res or above_g_res or
+  above_d_sup)`, derived from trend-residual breakout columns (`d_resi`, `g_resi`,
+  `d_supi`) and carried alongside the label
   (`btc_feature_engineering_utils.py` `TargetExtractor3._generate_the_targets_df`,
   `reversal_detector(..., qualified)`).
-- **Why it matters.** This is an **event-qualification / sampling-cadence**
-  mechanism, conceptually adjacent to [D-015](#d-015--labeling-event-filter-sampling-cadence) (the CUSUM filter we *rejected* for
-  this iteration). v1 actually shipped a qualification filter of its own, so the
-  v1-faithful arm's label *distribution* may depend on it. It is currently
-  **not** modeled anywhere in v2's labeler or splits.
-- **Open questions to resolve in Phase B (before B.1 is locked):**
-  1. What exactly do `d_resi` / `g_resi` / `d_supi` encode, and how is
-     `qualified` combined into them (the call site reads
-     `qualified = int(above_d_res or above_g_res or above_d_sup)`)?
-  2. Does `qualified` *filter* which bars get labeled, or only *annotate* them?
-     (Determines whether it changes the base rate / class balance.)
-  3. Should the v2 v1-faithful arm reproduce it, and should the honest arm carry
-     a `qualified` column for analysis even if it doesn't filter on it?
-- **Verdict.** None yet — **open**. Resolve by reading the v1 indicator code that
-  produces the `*_resi`/`*_supi` columns (across the full `Assareh/` tree, not
-  just `latest_code_and_results`), then convert this entry to Accepted/Rejected
-  with the usual verdict/rationale/alternative.
-- **Recorded alternative.** Ignore `consider_res` entirely (treat every 15m close
-  as an unqualified labeling event, [D-002](#d-002--decision-cadence-15m-bar-close)) — the current implicit behavior;
-  retained as the fallback if the filter turns out to be immaterial or
-  reproducible only at disproportionate cost.
-- **See also.** [L-017](LEARNINGS.md#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs) (where this surfaced); D-002 (decision cadence);
-  D-015 (rejected CUSUM event filter — the honest-arm analogue).
+- **Investigation (v1 source read, 2026-06-11).** The three open questions resolve as:
+  1. **What the columns encode.** `d_resi` / `g_resi` / `d_supi` are boolean
+     support/resistance **breakout** flags (`open` crossing a dynamic / golden
+     resistance or a dynamic support line) from
+     `Indicators/trend_ta.py:1369,1402-1404`. `qualified` is their OR — i.e. "a
+     support/resistance breakout occurred at this bar." It is a **trend-event
+     filter**, the same family as the CUSUM filter rejected in
+     [D-015](#d-015--labeling-event-filter-sampling-cadence).
+  2. **Filter or annotate — both, at different stages.** Inside the labeler
+     `qualified` only *annotates*: it is stored as a column and does **not** change
+     which bars are labeled. The `consider_res and not qualified` branch flips only
+     the **first** return value (`target3`, the meta-label) `1→0`; the **second**
+     value (`rt3`, the side label) is unchanged
+     (`reversal_detector`, lines 1123–1141). Downstream, however, the production
+     trainer (`ModelingUtils/trainers.py:119-121`) calls
+     `get_qualified_reframed_train/test/val_data()`, which **filter the sample set
+     to `qualified == 1`** (`...if self.y2_*.iloc[i, qualified_idx] == 1`, line
+     2568). Notebook output: ~25.4% of bars retained in the trend-residual-filter
+     (TRF) arm; ~100% (no-op) in the NoTRF arm. So v1's TRF runs trained and were
+     scored on a ~quarter subset.
+  3. **v2 reproduction — see verdict.**
+- **Verdict.** **`rt3` is provably unaffected by `consider_res`/`qualified`** — it
+  flips only `target3`, the discarded meta-label v2 does not produce
+  ([D-014](#d-014--meta-labeling-side--size-decomposition), [L-006](LEARNINGS.md#l-006--v1s-target2true-is-embedded-meta-labeling--but-it-was-a-failed-experiment)). Therefore **B.1's `make_labels` needs no change and is
+  unblocked**: the v1-faithful labeling arm produces identical `rt3` whether or not
+  the flag is modeled. The **honest arm does not adopt the qualified filter** —
+  D-002's unqualified per-15m-close cadence stands, consistent with rejecting the
+  analogous event filter in D-015. The `qualified` *sample-filter* is a genuine v1
+  mechanism but it lives **downstream** (it needs the trend-residual breakout
+  indicators, Phase D feature work, and acts at the sampler/eval stage), so it is
+  **not** a labeler concern; reproducing it in the v1-faithful arm is split out to
+  [D-041](#d-041--v1-faithful-qualified-sample-filter-trend-residual-gate).
+- **Recorded alternative.** (a) Reproduce the qualified filter inside the B.1
+  labeler — rejected; it changes no `rt3` value and the indicators it needs do not
+  exist until Phase D, so it would couple the labeler to feature code for no label
+  effect. (b) Ignore `consider_res` entirely, including downstream — rejected in
+  favor of D-041, because v1's TRF reported numbers came from the `qualified == 1`
+  subset and a valid "v1 said X" comparison must reproduce that population.
+- **See also.** [L-017](LEARNINGS.md#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs) (where this surfaced);
+  [D-002](#d-002--decision-cadence-15m-bar-close) (decision cadence);
+  [D-015](#d-015--labeling-event-filter-sampling-cadence) (rejected CUSUM event filter — the honest-arm analogue);
+  [D-014](#d-014--meta-labeling-side--size-decomposition) (the `target3` meta-label is not reproduced);
+  [D-041](#d-041--v1-faithful-qualified-sample-filter-trend-residual-gate) (the deferred sample-filter).
+
+---
+
+## D-041 — v1-faithful qualified sample-filter (trend-residual gate)
+
+- **Phase:** D→E — **Status:** Accepted (deferred implementation; split from
+  [D-040](#d-040--v1s-qualified-event-filter-consider_res) 2026-06-11)
+- **Decision.** Comparison/selection concern carved out of D-040. The v1-faithful
+  arm **will** reproduce v1's `qualified == 1` sample-filter so that comparisons
+  against v1's trend-residual-filter (TRF) reported numbers are valid, but the
+  implementation is **deferred to where its inputs live**: the `d_resi` / `g_resi`
+  / `d_supi` breakout indicators are built in **Phase D** (feature engineering),
+  and the row-filter is applied at the **Phase E** sampler/eval stage (mirroring
+  v1's `get_qualified_reframed_*_data`). The honest arm never filters on
+  `qualified` (D-002 cadence; consistent with [D-015](#d-015--labeling-event-filter-sampling-cadence)).
+- **Scope at acceptance (per [D-001](#d-001--dual-arm-methodology-governing-rule)).** Classify as a leakage/selection probe
+  when implemented: honest primary (unfiltered), v1-faithful run to measure the
+  selection effect; the qualified-subset retention rate is logged. Whether the
+  honest arm also *carries* a `qualified` annotation column for analysis (without
+  filtering on it) is decided in Phase D alongside the indicator build.
+- **Why deferred, not done in B.** `qualified` changes no `rt3` value (D-040), and
+  its indicator inputs do not exist until Phase D. Implementing it in B.1 would
+  couple the labeler to feature code for zero label effect. Phase B therefore
+  closes D-040 without it; D-041 carries the remaining work.
+- **Recorded alternative.** Treat the filter as fully out of scope this iteration
+  (annotate v1's TRF numbers as not-reproduced) — rejected per the user decision
+  2026-06-11 to keep the v1-faithful comparison faithful to the population v1
+  actually trained on.
+- **See also.** [D-040](#d-040--v1s-qualified-event-filter-consider_res) (parent);
+  [D-013](#d-013--feature-selection-scope) (Phase D feature-scope discipline);
+  [D-015](#d-015--labeling-event-filter-sampling-cadence) (rejected honest-arm event filter);
+  [L-017](LEARNINGS.md#l-017--reading-v1s-latest_code_and_results-notebooks-refines-does-not-overturn-several-docs).
