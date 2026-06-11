@@ -64,6 +64,58 @@ def make_ohlcv():
 
 
 @pytest.fixture
+def synthetic_barrier_path(make_ohlcv):
+    """Factory: matched 1m / 15m frames + a `patr_15` column from a 1m price path.
+
+    For B.1 triple-barrier tests (PHASE_B B.1 Tests). Pass an explicit list of
+    1m `(open, high, low, close)` bars; the 15m frame is aggregated from them
+    (open=first, high=max, low=min, close=last over each 15m bucket). `patr` is
+    the percent-ATR attached to every 15m bar — a scalar, or a list aligned to
+    the 15m rows (use `None` to make a decision bar's pATR unrealised for the
+    D-038 probe). To drill a gap into the 1m substrate, pass `drop_minutes` as a
+    set of 0-based 1m indices to delete after construction.
+    """
+
+    def _build(
+        minute_bars: list[tuple[float, float, float, float]],
+        *,
+        patr: float | list[float | None] = 0.01,
+        start: datetime = datetime(2022, 1, 1, tzinfo=timezone.utc),
+        drop_minutes: set[int] | None = None,
+    ) -> tuple[pl.DataFrame, pl.DataFrame]:
+        opens = [b[0] for b in minute_bars]
+        highs = [b[1] for b in minute_bars]
+        lows = [b[2] for b in minute_bars]
+        closes = [b[3] for b in minute_bars]
+        df1m = make_ohlcv(opens, highs, lows, closes, interval="1m", start=start)
+
+        df15 = (
+            df1m.sort("open_time")
+            .group_by(pl.col("open_time").dt.truncate("15m").alias("open_time"), maintain_order=True)
+            .agg(
+                open=pl.col("open").first(),
+                high=pl.col("high").max(),
+                low=pl.col("low").min(),
+                close=pl.col("close").last(),
+            )
+            .sort("open_time")
+        )
+        n15 = df15.height
+        pcol = [patr] * n15 if not isinstance(patr, list) else patr
+        if len(pcol) != n15:
+            raise ValueError(f"patr list length {len(pcol)} != number of 15m bars {n15}")
+        df15 = df15.with_columns(pl.Series("patr_15", pcol, dtype=pl.Float64))
+
+        if drop_minutes:
+            keep = [i for i in range(df1m.height) if i not in drop_minutes]
+            df1m = df1m[keep]
+
+        return df1m, df15
+
+    return _build
+
+
+@pytest.fixture
 def synthetic_ohlcv():
     """Fixture factory: call with (rows, interval, issues) to get a synthetic OHLCV DataFrame.
 

@@ -895,14 +895,21 @@ first line of the decision body, not in the status field.
 ## D-029 — `LabelResult` schema and tail-sentinel dtype
 
 - **Phase:** B — **Status:** Accepted
-- **Decision.** `make_labels` returns a single Polars `DataFrame` aligned to
-  the 15m decision clock — one row per 15m bar in `df15`, never reindexed or
-  filtered by the labeler. Columns (full list in PHASE_B.md B.1):
-  `open_time, rt3, target3, first_touch_idx_1m, entry_price, profit_level,
-  stop_level, stop2_level, ambig_15m, ambig_1m, is_complete`.
-  - `rt3` and `target3` are `Int8` nullable; tail rows whose horizon window
-    is incomplete carry `null` in both label columns plus
-    `is_complete = False`.
+- **Decision.** `make_labels` returns a `LabelResult` whose `frame` is a single
+  Polars `DataFrame` aligned to the 15m decision clock — one row per 15m bar in
+  `df15`, never reindexed or filtered by the labeler. Columns (full list in
+  PHASE_B.md B.1):
+  `open_time, rt3, first_touch_idx_1m, entry_price, profit_level,
+  stop_level, ambig_15m, ambig_1m, is_complete`.
+  - `rt3` is `Int8` nullable; tail rows whose horizon window is incomplete
+    (and unresolvable rows under the honest D-036 / D-038 probes) carry
+    `null` in `rt3` plus `is_complete = False`.
+  - **`target3` / `stop2_level` are intentionally absent** — they belonged to
+    v1's discarded `target2` meta-label path, which v2 does not reproduce
+    ([D-014](#d-014--meta-labeling-side--size-decomposition), [L-006](LEARNINGS.md#l-006--v1s-target2true-is-embedded-meta-labeling--but-it-was-a-failed-experiment)).
+    (Corrected 2026-06-11: an earlier draft of this entry listed both columns
+    before the D-014/L-006 correction propagated here; the implemented schema in
+    `labels/targets.py` `LABEL_SCHEMA` and PHASE_B.md B.1 are authoritative.)
   - Scalar per-arm diagnostics (ambiguity rates, no-touch fraction) live in
     `LabelResult.attrs` (a dict alongside the DataFrame), read by B.2.
 - **v1 behavior.** v1's `TargetExtractor` returned a NumPy/Pandas vector of
@@ -921,7 +928,7 @@ first line of the decision body, not in the status field.
     because the DataFrame is the natural artifact for every downstream
     consumer.
   - Drop tail rows in `make_labels` — rejected; destroys index alignment.
-  - Boolean `is_labelable` column with arbitrary values in `rt3`/`target3`
+  - Boolean `is_labelable` column with arbitrary values in `rt3`
     for unlabeled rows — rejected; `rt3.is_null()` already conveys
     unlabelability and a typed null is harder to misuse than a sentinel
     integer.
@@ -930,7 +937,7 @@ first line of the decision body, not in the status field.
   typed-null mechanism: when a label's resolution would require
   synthesized data (a gap crossed by the 1m barrier walk, D-036; or a
   NaN pATR at the anchor bar, D-038), the honest arm emits
-  `rt3 = null, target3 = null, is_complete = False`. v1's `fillna(33)`
+  `rt3 = null, is_complete = False`. v1's `fillna(33)`
   magic-number tail ([L-015](LEARNINGS.md#l-015--minor-v1-fill-and-convention-behaviors-catch-all)) is the v1-faithful arm's counterpart, and
   the gap between these two representations is exactly the inflation
   D-036 / D-038 measure.
@@ -1062,8 +1069,7 @@ first line of the decision body, not in the status field.
 - **Phase:** B — **Status:** Accepted (resolved 2026-06-11; B.1-unblocking)
 - **Context.** v1's `TargetExtractor3` was run with `target2=True, consider_res=True`
   in every `latest_code_and_result` notebook (E1–E6, `0_Preprocessing`). This sets a
-  per-bar `qualified` flag, `qualified = int(above_d_res or above_g_res or
-  above_d_sup)`, derived from trend-residual breakout columns (`d_resi`, `g_resi`,
+  per-bar `qualified` flag, `qualified = int(above_d_res or above_g_res or above_d_sup)`, derived from trend-residual breakout columns (`d_resi`, `g_resi`,
   `d_supi`) and carried alongside the label
   (`btc_feature_engineering_utils.py` `TargetExtractor3._generate_the_targets_df`,
   `reversal_detector(..., qualified)`).
